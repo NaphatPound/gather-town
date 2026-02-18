@@ -1,0 +1,70 @@
+{
+  "placements": [
+    {
+      "id": "welcome-sign-1",
+      "objectId": "welcome-sign",
+      "tileX": 11,
+      "tileY": 7,
+      "interactionData": {
+        "title": "Welcome!",
+        "content": "Welcome to Pixel World! Use WASD or arrow keys to move around. Walk up to objects and press X to interact with them. Explore the building to the northeast!"
+      }
+    },
+    {
+      "id": "desk-1",
+      "objectId": "wooden-desk",
+      "tileX": 16,
+      "tileY": 3
+    },
+    {
+      "id": "chair-1",
+      "objectId": "office-chair",
+      "tileX": 16,
+      "tileY": 4
+    },
+    {
+      "id": "monitor-1",
+      "objectId": "monitor",
+      "tileX": 17,
+      "tileY": 3,
+      "interactionData": {
+        "title": "Office Computer",
+        "url": "https://gather.town",
+        "content": "A monitor displaying the Gather.town website."
+      }
+    },
+    {
+      "id": "bookshelf-1",
+      "objectId": "bookshelf",
+      "tileX": 15,
+      "tileY": 3,
+      "interactionData": {
+        "title": "Bookshelf",
+        "content": "A collection of programming books: 'Clean Code', 'Design Patterns', 'The Pragmatic Programmer', and 'Refactoring'. Quite the library!"
+      }
+    },
+    {
+      "id": "tv-1",
+      "objectId": "large-tv",
+      "tileX": 3,
+      "tileY": 6,
+      "interactionData": {
+        "title": "Notice Board TV",
+        "imageUrl": "https://picsum.photos/seed/pixelworld/400/300",
+        "content": "A large TV screen displaying a scenic landscape."
+      }
+    },
+    {
+      "id": "plant-1",
+      "objectId": "potted-plant",
+      "tileX": 13,
+      "tileY": 5
+    },
+    {
+      "id": "lamp-1",
+      "objectId": "floor-lamp",
+      "tileX": 13,
+      "tileY": 3
+    }
+  ]
+}

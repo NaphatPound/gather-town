@@ -1,0 +1,104 @@
+{
+  "objects": [
+    {
+      "id": "wooden-desk",
+      "name": "Wooden Desk",
+      "category": "furniture",
+      "width": 1,
+      "height": 1,
+      "solid": true,
+      "pixelArt": {
+        "shape": "desk",
+        "colors": { "top": "#8B6914", "legs": "#6B4E0A", "surface": "#A07828" }
+      }
+    },
+    {
+      "id": "office-chair",
+      "name": "Office Chair",
+      "category": "furniture",
+      "width": 1,
+      "height": 1,
+      "solid": false,
+      "pixelArt": {
+        "shape": "chair",
+        "colors": { "seat": "#2c3e50", "back": "#34495e", "legs": "#555555" }
+      }
+    },
+    {
+      "id": "welcome-sign",
+      "name": "Welcome Sign",
+      "category": "sign",
+      "width": 1,
+      "height": 1,
+      "solid": true,
+      "interactionType": "note",
+      "pixelArt": {
+        "shape": "sign",
+        "colors": { "post": "#6B4E0A", "board": "#C4A35A", "text": "#3E2723" }
+      }
+    },
+    {
+      "id": "bookshelf",
+      "name": "Bookshelf",
+      "category": "furniture",
+      "width": 1,
+      "height": 1,
+      "solid": true,
+      "interactionType": "note",
+      "pixelArt": {
+        "shape": "bookshelf",
+        "colors": { "frame": "#5D4037", "shelf": "#795548", "books1": "#e74c3c", "books2": "#2980b9", "books3": "#27ae60" }
+      }
+    },
+    {
+      "id": "monitor",
+      "name": "Monitor",
+      "category": "screen",
+      "width": 1,
+      "height": 1,
+      "solid": true,
+      "interactionType": "link",
+      "pixelArt": {
+        "shape": "monitor",
+        "colors": { "frame": "#2c2c2c", "screen": "#4fc3f7", "stand": "#444444", "pixel": "#81d4fa" }
+      }
+    },
+    {
+      "id": "large-tv",
+      "name": "Large TV",
+      "category": "screen",
+      "width": 1,
+      "height": 1,
+      "solid": true,
+      "interactionType": "image",
+      "pixelArt": {
+        "shape": "tv",
+        "colors": { "frame": "#1a1a1a", "screen": "#263238", "led": "#4caf50" }
+      }
+    },
+    {
+      "id": "potted-plant",
+      "name": "Potted Plant",
+      "category": "decoration",
+      "width": 1,
+      "height": 1,
+      "solid": false,
+      "pixelArt": {
+        "shape": "plant",
+        "colors": { "pot": "#a1887f", "potRim": "#8d6e63", "soil": "#4e342e", "leaf": "#4caf50", "leafDark": "#388e3c" }
+      }
+    },
+    {
+      "id": "floor-lamp",
+      "name": "Floor Lamp",
+      "category": "decoration",
+      "width": 1,
+      "height": 1,
+      "solid": false,
+      "pixelArt": {
+        "shape": "lamp",
+        "colors": { "pole": "#9e9e9e", "shade": "#fff9c4", "base": "#757575", "glow": "#fff176" }
+      }
+    }
+  ]
+}

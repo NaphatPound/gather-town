@@ -1,0 +1,57 @@
+{
+  "categories": [
+    {
+      "id": "body",
+      "name": "Body",
+      "zIndex": 0
+    },
+    {
+      "id": "outfit",
+      "name": "Outfit",
+      "zIndex": 1
+    },
+    {
+      "id": "hair",
+      "name": "Hair",
+      "zIndex": 2
+    },
+    {
+      "id": "accessory",
+      "name": "Accessories",
+      "zIndex": 3
+    }
+  ],
+  "items": {
+    "body": [
+      { "id": "body_light", "name": "Light", "color": "#FDDCB5" },
+      { "id": "body_medium", "name": "Medium", "color": "#D4A574" },
+      { "id": "body_tan", "name": "Tan", "color": "#C68642" },
+      { "id": "body_dark", "name": "Dark", "color": "#8D5524" },
+      { "id": "body_deep", "name": "Deep", "color": "#5C3310" }
+    ],
+    "outfit": [
+      { "id": "outfit_tshirt_red", "name": "Red T-Shirt", "color": "#E74C3C", "type": "tshirt" },
+      { "id": "outfit_tshirt_blue", "name": "Blue T-Shirt", "color": "#3498DB", "type": "tshirt" },
+      { "id": "outfit_tshirt_green", "name": "Green T-Shirt", "color": "#2ECC71", "type": "tshirt" },
+      { "id": "outfit_hoodie_gray", "name": "Gray Hoodie", "color": "#95A5A6", "type": "hoodie" },
+      { "id": "outfit_hoodie_purple", "name": "Purple Hoodie", "color": "#9B59B6", "type": "hoodie" },
+      { "id": "outfit_suit", "name": "Black Suit", "color": "#2C3E50", "type": "suit" }
+    ],
+    "hair": [
+      { "id": "hair_short_black", "name": "Short Black", "color": "#1a1a1a", "type": "short" },
+      { "id": "hair_short_brown", "name": "Short Brown", "color": "#8B4513", "type": "short" },
+      { "id": "hair_short_blonde", "name": "Short Blonde", "color": "#F4D03F", "type": "short" },
+      { "id": "hair_long_black", "name": "Long Black", "color": "#1a1a1a", "type": "long" },
+      { "id": "hair_long_red", "name": "Long Red", "color": "#C0392B", "type": "long" },
+      { "id": "hair_spiky_blue", "name": "Spiky Blue", "color": "#2980B9", "type": "spiky" },
+      { "id": "hair_none", "name": "None", "color": "transparent", "type": "none" }
+    ],
+    "accessory": [
+      { "id": "acc_none", "name": "None", "color": "transparent", "type": "none" },
+      { "id": "acc_glasses", "name": "Glasses", "color": "#2C3E50", "type": "glasses" },
+      { "id": "acc_sunglasses", "name": "Sunglasses", "color": "#1a1a1a", "type": "sunglasses" },
+      { "id": "acc_hat_cap", "name": "Cap", "color": "#E74C3C", "type": "hat" },
+      { "id": "acc_hat_beanie", "name": "Beanie", "color": "#8E44AD", "type": "hat" }
+    ]
+  }
+}
