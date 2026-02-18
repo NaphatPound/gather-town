@@ -47,3 +47,19 @@
 - **RemotePlayerManager** (`apps/client/src/features/world/RemotePlayerManager.ts`): Manages remote player sprites + name labels, lerp interpolation (0.15/frame) for smooth movement, texture cleanup on removal
 - **MainScene** wiring: Subscribes to all network events in `create()`, sends position in `update()`, cleans up on `shutdown`
 - **GameView** wiring: Calls `networkService.connect()` on mount, `disconnect()` on unmount
+
+### 10. Fix: Server dev script (Bug Fix)
+- Switched `apps/server/package.json` dev script from `ts-node --esm` to `tsx` (fixes `ERR_UNKNOWN_FILE_EXTENSION` on Node 20)
+- Installed `tsx` as devDependency
+
+### 11. Git init + push to GitHub (Setup)
+- Initialized git repo, added `.gitignore` (node_modules, dist, .env, .DS_Store, .obsidian)
+- Created initial commit with full project
+- Published to https://github.com/NaphatPound/gather-town
+
+### 12. Dockerize for Deployment (Feature)
+- **NetworkService** (`apps/client/src/core/network/NetworkService.ts`): Changed hardcoded `io("http://localhost:3001")` → `io(import.meta.env.VITE_SERVER_URL || "")` so Socket.io connects to same origin in production
+- **Server** (`apps/server/src/index.ts`): Added production mode (`NODE_ENV=production`) — serves client static files via `express.static`, SPA catch-all route for client-side routing, CORS only enabled in dev
+- **Dockerfile**: Multi-stage build (client-build → server-build → production) using `node:20-alpine`, single container serves everything on port 3001
+- **docker-compose.yml**: Single service, maps port 3001
+- **.dockerignore**: Excludes node_modules, dist, .git, .obsidian, markdown docs, Research, Resources

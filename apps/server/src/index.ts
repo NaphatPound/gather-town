@@ -2,6 +2,8 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
 interface PlayerData {
   id: string;
@@ -11,23 +13,35 @@ interface PlayerData {
   y: number;
 }
 
+const isProd = process.env.NODE_ENV === "production";
+
 const app = express();
-app.use(cors());
 app.use(express.json());
+
+if (isProd) {
+  // Same origin in production — no CORS needed
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const clientDist = path.join(__dirname, "../../client/dist");
+  app.use(express.static(clientDist));
+} else {
+  app.use(cors());
+}
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: {
-    origin: (origin, callback) => {
-      // Allow any localhost port (Vite auto-increments)
-      if (!origin || /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST"],
-  },
+  cors: isProd
+    ? undefined
+    : {
+        origin: (origin, callback) => {
+          // Allow any localhost port (Vite auto-increments)
+          if (!origin || /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+            callback(null, true);
+          } else {
+            callback(new Error("Not allowed by CORS"));
+          }
+        },
+        methods: ["GET", "POST"],
+      },
 });
 
 const players = new Map<string, PlayerData>();
@@ -80,6 +94,15 @@ io.on("connection", (socket) => {
     io.emit("player:left", { id: socket.id });
   });
 });
+
+// SPA catch-all: serve index.html for client-side routing (production only)
+if (isProd) {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const indexHtml = path.join(__dirname, "../../client/dist/index.html");
+  app.get("/*splat", (_req, res) => {
+    res.sendFile(indexHtml);
+  });
+}
 
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
