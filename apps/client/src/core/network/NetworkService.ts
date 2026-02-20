@@ -16,6 +16,7 @@ type NetworkEvents = {
   "chat:message": (data: { id: string; text: string; sender: string }) => void;
   "goal:scored": (data: { side: "left" | "right" }) => void;
   "score:sync": (data: { left: number; right: number }) => void;
+  "ball:sync": (data: { x: number; y: number; vx: number; vy: number }) => void;
 };
 
 const SEND_INTERVAL_MS = 100; // 10 updates/sec
@@ -98,6 +99,10 @@ class NetworkService {
 
   sendGoal(side: "left" | "right") {
     this.safeEmit("goal:scored", { side });
+  }
+
+  sendBallUpdate(x: number, y: number, vx: number, vy: number) {
+    this.safeEmit("ball:update", { x, y, vx, vy });
   }
 
   on<E extends keyof NetworkEvents>(event: E, callback: NetworkEvents[E]) {

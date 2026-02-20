@@ -39,6 +39,7 @@ const io = new Server(httpServer, {
 
 const players = new Map<string, PlayerData>();
 const score = { left: 0, right: 0 };
+const ballState = { x: 30 * 32 + 16, y: 7 * 32 + 16, vx: 0, vy: 0 };
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -66,8 +67,9 @@ io.on("connection", (socket) => {
       console.log(`[SERVER] Sending players:existing to ${socket.id}, count: ${players.size}`);
       socket.emit("players:existing", Array.from(players.values()));
 
-      // Send current score to the joiner
+      // Send current score and ball state to the joiner
       socket.emit("score:sync", score);
+      socket.emit("ball:sync", ballState);
 
       // Broadcast new player to everyone else
       console.log(`[SERVER] Broadcasting player:joined to others for ${socket.id}`);
@@ -92,6 +94,17 @@ io.on("connection", (socket) => {
     console.log(`Player disconnected: ${socket.id}`);
     players.delete(socket.id);
     io.emit("player:left", { id: socket.id });
+
+    // Reset score and ball when all players have left
+    if (players.size === 0) {
+      score.left = 0;
+      score.right = 0;
+      ballState.x = 30 * 32 + 16;
+      ballState.y = 7 * 32 + 16;
+      ballState.vx = 0;
+      ballState.vy = 0;
+      console.log("[SERVER] All players disconnected. Score and ball reset.");
+    }
   });
 
   socket.on("chat:message", (data: { text: string; sender: string }) => {
@@ -104,6 +117,15 @@ io.on("connection", (socket) => {
     console.log(`[SERVER] Goal scored: ${data.side}. Score: L${score.left} - R${score.right}`);
     io.emit("goal:scored", data);
     io.emit("score:sync", score);
+  });
+
+  // Ball state sync — relay kicks to all other clients
+  socket.on("ball:update", (data: { x: number; y: number; vx: number; vy: number }) => {
+    ballState.x = data.x;
+    ballState.y = data.y;
+    ballState.vx = data.vx;
+    ballState.vy = data.vy;
+    socket.broadcast.emit("ball:sync", ballState);
   });
 });
 
