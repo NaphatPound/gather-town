@@ -78,7 +78,7 @@ export default function GoalCelebration() {
 
     if (!visible) return null;
 
-    const color = side === "left" ? "#ff4444" : "#4488ff";
+    const color = side === "left" ? "#4488ff" : "#ff4444";
     const teamLabel = side === "left" ? "← LEFT SCORES!" : "RIGHT SCORES! →";
 
     return (
