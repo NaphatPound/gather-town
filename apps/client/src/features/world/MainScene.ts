@@ -513,11 +513,17 @@ export default class MainScene extends Phaser.Scene {
       (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
 
     if (!isTyping) {
-      if (this.cursors.left.isDown || this.wasd.A.isDown || mobileInput.left) vx = -speed;
-      else if (this.cursors.right.isDown || this.wasd.D.isDown || mobileInput.right) vx = speed;
+      if (this.cursors.left.isDown || this.wasd.A.isDown) vx = -speed;
+      else if (this.cursors.right.isDown || this.wasd.D.isDown) vx = speed;
 
-      if (this.cursors.up.isDown || this.wasd.W.isDown || mobileInput.up) vy = -speed;
-      else if (this.cursors.down.isDown || this.wasd.S.isDown || mobileInput.down) vy = speed;
+      if (this.cursors.up.isDown || this.wasd.W.isDown) vy = -speed;
+      else if (this.cursors.down.isDown || this.wasd.S.isDown) vy = speed;
+
+      // Analog joystick overrides keyboard when active
+      if (mobileInput.active) {
+        vx = mobileInput.dirX * speed;
+        vy = mobileInput.dirY * speed;
+      }
     }
 
     // Track facing direction (only update when moving)
