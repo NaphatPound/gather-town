@@ -203,6 +203,11 @@ export default class MainScene extends Phaser.Scene {
     this.cameras.main.centerOn(this.player.x, this.player.y);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
+    // Handle window resize so the camera viewport stays in sync
+    this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
+      this.cameras.main.setViewport(0, 0, gameSize.width, gameSize.height);
+    });
+
     // Set up input without global capture so HTML inputs work
     this.cursors = {
       up: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.UP, false),

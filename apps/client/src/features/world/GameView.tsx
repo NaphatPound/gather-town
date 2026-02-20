@@ -38,14 +38,14 @@ export default function GameView({ avatarDataURL, avatarConfig, playerName, onBa
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: 640,
-      height: 480,
+      width: window.innerWidth,
+      height: window.innerHeight,
       parent: containerRef.current,
       backgroundColor: "#1a1a2e",
       pixelArt: true,
       scene: scene,
       scale: {
-        mode: Phaser.Scale.FIT,
+        mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH,
       },
     };
@@ -61,32 +61,35 @@ export default function GameView({ avatarDataURL, avatarConfig, playerName, onBa
   }, [avatarDataURL]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-900 gap-4">
-      <div className="flex items-center gap-4">
+    <div ref={wrapperRef} className="relative w-screen h-screen overflow-hidden bg-gray-900">
+      {/* Full-screen game canvas */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+      />
+
+      {/* Floating top bar */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-3 z-50 bg-black/60 backdrop-blur-sm rounded-xl px-4 py-2 shadow-lg border border-gray-700/50">
         <button
           onClick={onBack}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
+          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
         >
           Back to Editor
         </button>
-        <h2 className="text-lg font-semibold text-white">Pixel World</h2>
-        <span className="text-sm text-gray-400">WASD/Arrows to move · X to interact</span>
+        <h2 className="text-sm font-semibold text-white">Pixel World</h2>
+        <span className="text-xs text-gray-400 hidden md:inline">WASD/Arrows to move · X to interact</span>
         <button
           onClick={toggleFullscreen}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
+          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
         >
           Fullscreen
         </button>
       </div>
-      <div ref={wrapperRef} className="relative bg-gray-900">
-        <div
-          ref={containerRef}
-          className="border-2 border-gray-700 rounded-lg overflow-hidden"
-        />
-        <InteractionOverlay />
-        <ScoreBoard />
-        <ChatBox playerName={playerName} />
-      </div>
+
+      {/* Overlays */}
+      <InteractionOverlay />
+      <ScoreBoard />
+      <ChatBox playerName={playerName} />
     </div>
   );
 }
