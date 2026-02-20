@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 interface PlayerData {
   id: string;
   name: string;
-  avatar: string;
+  avatar: { body: string; outfit: string; hair: string; accessory: string };
   x: number;
   y: number;
 }
@@ -32,16 +32,9 @@ const io = new Server(httpServer, {
   cors: isProd
     ? undefined
     : {
-        origin: (origin, callback) => {
-          // Allow any localhost port (Vite auto-increments)
-          if (!origin || /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-            callback(null, true);
-          } else {
-            callback(new Error("Not allowed by CORS"));
-          }
-        },
-        methods: ["GET", "POST"],
-      },
+      origin: "*",
+      methods: ["GET", "POST"],
+    },
 });
 
 const players = new Map<string, PlayerData>();
@@ -57,7 +50,8 @@ io.on("connection", (socket) => {
 
   socket.on(
     "player:join",
-    (data: { avatar: string; name: string; x: number; y: number }) => {
+    (data: { avatar: { body: string; outfit: string; hair: string; accessory: string }; name: string; x: number; y: number }) => {
+      console.log(`[SERVER] Received player:join from ${socket.id} with name ${data.name}`);
       const player: PlayerData = {
         id: socket.id,
         name: data.name,
@@ -68,9 +62,11 @@ io.on("connection", (socket) => {
       players.set(socket.id, player);
 
       // Send existing players to the joiner
+      console.log(`[SERVER] Sending players:existing to ${socket.id}, count: ${players.size}`);
       socket.emit("players:existing", Array.from(players.values()));
 
       // Broadcast new player to everyone else
+      console.log(`[SERVER] Broadcasting player:joined to others for ${socket.id}`);
       socket.broadcast.emit("player:joined", player);
     }
   );
@@ -92,6 +88,11 @@ io.on("connection", (socket) => {
     console.log(`Player disconnected: ${socket.id}`);
     players.delete(socket.id);
     io.emit("player:left", { id: socket.id });
+  });
+
+  socket.on("chat:message", (data: { text: string; sender: string }) => {
+    console.log(`[SERVER] Chat message from ${socket.id} (${data.sender}): ${data.text}`);
+    io.emit("chat:message", { id: socket.id, text: data.text, sender: data.sender });
   });
 });
 

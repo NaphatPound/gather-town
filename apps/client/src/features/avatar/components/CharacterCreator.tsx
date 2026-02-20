@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import AvatarRenderer from "./AvatarRenderer";
 import CategoryPanel from "./CategoryPanel";
 import { eventBus, Events } from "../../../core/events/EventBus";
+import { useAvatarStore } from "../../../store/avatarStore";
 import type { AvatarRendererHandle } from "./AvatarRenderer";
 
 interface CharacterCreatorProps {
@@ -17,7 +18,14 @@ export default function CharacterCreator({ onEnterWorld }: CharacterCreatorProps
     if (rendererRef.current) {
       const dataURL = rendererRef.current.getDataURL();
       const name = playerName.trim() || "Guest";
-      eventBus.emit(Events.ENTER_WORLD, { avatarDataURL: dataURL, playerName: name });
+
+      const { body, outfit, hair, accessory } = useAvatarStore.getState();
+
+      eventBus.emit(Events.ENTER_WORLD, {
+        avatarDataURL: dataURL,
+        avatarConfig: { body, outfit, hair, accessory },
+        playerName: name
+      });
     }
     onEnterWorld?.();
   };

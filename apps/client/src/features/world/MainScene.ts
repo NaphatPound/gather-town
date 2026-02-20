@@ -16,6 +16,7 @@ export default class MainScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
   private avatarDataURL: string = "";
+  private avatarConfig!: { body: string; outfit: string; hair: string; accessory: string };
   private playerName: string = "Guest";
   private groundLayer!: Phaser.Tilemaps.TilemapLayer;
   private objectManager!: ObjectManager;
@@ -32,13 +33,16 @@ export default class MainScene extends Phaser.Scene {
 
   // Bound handlers for cleanup
   private onPlayersExisting = (players: PlayerData[]) => {
+    console.log(`[MainScene] players:existing received. Count: ${players.length}, my id: ${networkService.id}`);
     for (const p of players) {
+      console.log(`[MainScene]  - player id=${p.id}, name=${p.name}, skip=${p.id === networkService.id}`);
       if (p.id !== networkService.id) {
         this.remotePlayerManager.addPlayer(p.id, p.name, p.avatar, p.x, p.y);
       }
     }
   };
   private onPlayerJoined = (p: PlayerData) => {
+    console.log(`[MainScene] player:joined id=${p.id}, name=${p.name}`);
     this.remotePlayerManager.addPlayer(p.id, p.name, p.avatar, p.x, p.y);
   };
   private onPlayerMoved = (data: { id: string; x: number; y: number }) => {
@@ -48,9 +52,10 @@ export default class MainScene extends Phaser.Scene {
     this.remotePlayerManager.removePlayer(data.id);
   };
 
-  constructor(avatarDataURL: string, playerName: string) {
+  constructor(avatarDataURL: string, avatarConfig: { body: string; outfit: string; hair: string; accessory: string }, playerName: string) {
     super({ key: "MainScene" });
     this.avatarDataURL = avatarDataURL;
+    this.avatarConfig = avatarConfig;
     this.playerName = playerName;
   }
 
@@ -198,19 +203,27 @@ export default class MainScene extends Phaser.Scene {
     this.cameras.main.centerOn(this.player.x, this.player.y);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
-    // Set up input
-    this.cursors = this.input.keyboard!.createCursorKeys();
+    // Set up input without global capture so HTML inputs work
+    this.cursors = {
+      up: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.UP, false),
+      down: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN, false),
+      left: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT, false),
+      right: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT, false),
+      space: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE, false),
+      shift: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT, false),
+    } as Phaser.Types.Input.Keyboard.CursorKeys;
+
     this.wasd = {
-      W: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-      A: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-      S: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-      D: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+      W: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.W, false),
+      A: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A, false),
+      S: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S, false),
+      D: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D, false),
     };
 
     // Spacebar for charged kick
-    this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE, false);
     // Shift for sprint
-    this.shiftKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    this.shiftKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT, false);
 
     // Charge bar graphic (hidden initially)
     this.chargeBar = this.add.graphics();
@@ -254,7 +267,7 @@ export default class MainScene extends Phaser.Scene {
     networkService.on("player:moved", this.onPlayerMoved);
     networkService.on("player:left", this.onPlayerLeft);
 
-    networkService.joinGame(this.avatarDataURL, this.playerName, startX, startY);
+    networkService.joinGame(this.avatarConfig, this.playerName, startX, startY);
 
     // Cleanup on scene shutdown
     this.events.on("shutdown", () => {
@@ -415,48 +428,65 @@ export default class MainScene extends Phaser.Scene {
 
   private async loadSpriteSheet() {
     try {
-      const sheetCanvas = await generateSpriteSheet();
+      const sheetCanvas = await generateSpriteSheet(this.avatarConfig);
 
-      // Convert canvas to HTMLImageElement (Phaser requires it for addSpriteSheet)
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = reject;
-        image.src = sheetCanvas.toDataURL();
-      });
+      // Convert canvas to base64 image
+      const base64 = sheetCanvas.toDataURL("image/png");
 
       if (this.textures.exists("player-sheet")) {
         this.textures.remove("player-sheet");
       }
-      this.textures.addSpriteSheet("player-sheet", img, {
-        frameWidth: 32,
-        frameHeight: 32,
-      });
 
-      // Create animations
-      const animKeys = ["player-idle", "player-walk", "player-run", "player-kick"] as const;
-      const configs = [ANIM_CONFIG.idle, ANIM_CONFIG.walk, ANIM_CONFIG.run, ANIM_CONFIG.kick];
-      for (let i = 0; i < animKeys.length; i++) {
-        if (this.anims.exists(animKeys[i])) this.anims.remove(animKeys[i]);
-        this.anims.create({
-          key: animKeys[i],
-          frames: this.anims.generateFrameNumbers("player-sheet", {
-            start: configs[i].start,
-            end: configs[i].end,
-          }),
-          frameRate: configs[i].frameRate,
-          repeat: configs[i].repeat,
-        });
+      const img = new Image();
+      img.onload = () => {
+        if (!this.sys || !this.sys.game || !this.textures || !this.anims) return;
+
+        // Add the image directly as a simple texture
+        const tex = this.textures.addImage("player-sheet", img);
+
+        if (tex) {
+          // Manually define frames: sprite sheet is a single row of 12 frames (384×32)
+          for (let i = 0; i < 12; i++) {
+            tex.add(i.toString(), 0, i * 32, 0, 32, 32);
+          }
+        }
+
+        const animKeys = ["player-idle", "player-walk", "player-run", "player-kick"] as const;
+        const configs = [ANIM_CONFIG.idle, ANIM_CONFIG.walk, ANIM_CONFIG.run, ANIM_CONFIG.kick];
+
+        for (let i = 0; i < animKeys.length; i++) {
+          if (this.anims.exists(animKeys[i])) this.anims.remove(animKeys[i]);
+
+          const frameStart = configs[i].start;
+          const frameEnd = configs[i].end;
+          const frames = [];
+          for (let f = frameStart; f <= frameEnd; f++) {
+            frames.push({ key: "player-sheet", frame: f.toString() });
+          }
+
+          this.anims.create({
+            key: animKeys[i],
+            frames: frames,
+            frameRate: configs[i].frameRate,
+            repeat: configs[i].repeat,
+          });
+        }
+
+        if (this.player && this.player.active) {
+          this.player.setTexture("player-sheet");
+          this.player.setSize(32, 32);
+          this.player.setDisplaySize(32, 32);
+          this.player.play("player-idle");
+
+          this.player.on("animationcomplete-player-kick", () => {
+            this.playerState = "idle";
+          });
+        }
+      };
+      img.onerror = (e) => {
+        console.error("MainScene Image base64 failed to load", e);
       }
-
-      this.player.setTexture("player-sheet");
-      this.player.setScale(TILE_SIZE / 32);
-      this.player.play("player-idle");
-
-      // When kick finishes, return to idle or walk
-      this.player.on("animationcomplete-player-kick", () => {
-        this.playerState = "idle";
-      });
+      img.src = base64;
     } catch (e) {
       // Fallback: keep the blue square if sprite sheet generation fails
       console.warn("Sprite sheet generation failed, using fallback", e);
@@ -470,11 +500,19 @@ export default class MainScene extends Phaser.Scene {
     let vy = 0;
     const speed = this.shiftKey.isDown ? SPRINT_SPEED : PLAYER_SPEED;
 
-    if (this.cursors.left.isDown || this.wasd.A.isDown) vx = -speed;
-    else if (this.cursors.right.isDown || this.wasd.D.isDown) vx = speed;
+    // Don't capture WASD and space if user is typing in an input or textarea
+    const activeElement = document.activeElement;
+    const isTyping =
+      activeElement &&
+      (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
 
-    if (this.cursors.up.isDown || this.wasd.W.isDown) vy = -speed;
-    else if (this.cursors.down.isDown || this.wasd.S.isDown) vy = speed;
+    if (!isTyping) {
+      if (this.cursors.left.isDown || this.wasd.A.isDown) vx = -speed;
+      else if (this.cursors.right.isDown || this.wasd.D.isDown) vx = speed;
+
+      if (this.cursors.up.isDown || this.wasd.W.isDown) vy = -speed;
+      else if (this.cursors.down.isDown || this.wasd.S.isDown) vy = speed;
+    }
 
     // Track facing direction (only update when moving)
     if (vx !== 0 || vy !== 0) {
@@ -494,7 +532,7 @@ export default class MainScene extends Phaser.Scene {
     const dt = this.game.loop.delta / 1000;
 
     // ── Charge kick logic ──
-    if (this.spaceKey.isDown) {
+    if (this.spaceKey.isDown && !isTyping) {
       if (!this.isCharging) {
         this.isCharging = true;
         this.charge = 0;

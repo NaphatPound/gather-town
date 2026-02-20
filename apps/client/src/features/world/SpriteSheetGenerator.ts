@@ -6,7 +6,6 @@ import {
   type LimbOffsets,
   NO_OFFSETS,
 } from "../avatar/drawAvatar";
-import { useAvatarStore } from "../../store/avatarStore";
 import { fetchManifest, getItemById } from "../avatar/logic";
 
 const FRAME_SIZE = 32;
@@ -35,9 +34,9 @@ const FRAME_OFFSETS: LimbOffsets[] = [
   { leftArmY: 0, rightArmY: 0, leftLegY: 0, rightLegY: 0, leftLegX: 0, rightLegX: 0 },    // return
 ];
 
-export async function generateSpriteSheet(): Promise<HTMLCanvasElement> {
+export async function generateSpriteSheet(avatarConfig: { body: string; outfit: string; hair: string; accessory: string }): Promise<HTMLCanvasElement> {
   const manifest = await fetchManifest();
-  const { body, outfit, hair, accessory } = useAvatarStore.getState();
+  const { body, outfit, hair, accessory } = avatarConfig;
 
   const canvas = document.createElement("canvas");
   canvas.width = FRAME_SIZE * TOTAL_FRAMES;

@@ -3,15 +3,17 @@ import Phaser from "phaser";
 import MainScene from "./MainScene";
 import InteractionOverlay from "./components/InteractionOverlay";
 import ScoreBoard from "./components/ScoreBoard";
+import ChatBox from "./components/ChatBox";
 import { networkService } from "../../core/network/NetworkService";
 
 interface GameViewProps {
   avatarDataURL: string;
+  avatarConfig: { body: string; outfit: string; hair: string; accessory: string };
   playerName: string;
   onBack?: () => void;
 }
 
-export default function GameView({ avatarDataURL, playerName, onBack }: GameViewProps) {
+export default function GameView({ avatarDataURL, avatarConfig, playerName, onBack }: GameViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -32,7 +34,7 @@ export default function GameView({ avatarDataURL, playerName, onBack }: GameView
     // Connect to multiplayer server before starting game
     networkService.connect();
 
-    const scene = new MainScene(avatarDataURL, playerName);
+    const scene = new MainScene(avatarDataURL, avatarConfig, playerName);
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
@@ -83,6 +85,7 @@ export default function GameView({ avatarDataURL, playerName, onBack }: GameView
         />
         <InteractionOverlay />
         <ScoreBoard />
+        <ChatBox playerName={playerName} />
       </div>
     </div>
   );

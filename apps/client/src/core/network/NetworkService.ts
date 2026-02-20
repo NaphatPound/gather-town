@@ -3,7 +3,7 @@ import { io, Socket } from "socket.io-client";
 interface PlayerData {
   id: string;
   name: string;
-  avatar: string;
+  avatar: { body: string; outfit: string; hair: string; accessory: string };
   x: number;
   y: number;
 }
@@ -13,6 +13,7 @@ type NetworkEvents = {
   "player:joined": (player: PlayerData) => void;
   "player:moved": (data: { id: string; x: number; y: number }) => void;
   "player:left": (data: { id: string }) => void;
+  "chat:message": (data: { id: string; text: string; sender: string }) => void;
 };
 
 const SEND_INTERVAL_MS = 100; // 10 updates/sec
@@ -22,10 +23,29 @@ class NetworkService {
   private lastSentX = -1;
   private lastSentY = -1;
   private lastSendTime = 0;
+  private listeners: { [key: string]: Function[] } = {};
+  private queuedEmits: { event: string; args: any[] }[] = [];
 
   connect() {
     if (this.socket) return;
     this.socket = io(import.meta.env.VITE_SERVER_URL || "");
+
+    this.socket.on("connect", () => {
+      console.log("NetworkService connected. Flushing queued emits.");
+      while (this.queuedEmits.length > 0) {
+        const item = this.queuedEmits.shift();
+        if (item) {
+          this.socket?.emit(item.event, ...item.args);
+        }
+      }
+    });
+
+    // Attach queued listeners
+    for (const [evt, callbacks] of Object.entries(this.listeners)) {
+      callbacks.forEach((cb) => {
+        this.socket?.on(evt, cb as (...args: unknown[]) => void);
+      });
+    }
   }
 
   disconnect() {
@@ -34,10 +54,19 @@ class NetworkService {
     this.socket = null;
     this.lastSentX = -1;
     this.lastSentY = -1;
+    this.queuedEmits = [];
   }
 
-  joinGame(avatar: string, name: string, x: number, y: number) {
-    this.socket?.emit("player:join", { avatar, name, x, y });
+  private safeEmit(event: string, ...args: any[]) {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit(event, ...args);
+    } else {
+      this.queuedEmits.push({ event, args });
+    }
+  }
+
+  joinGame(avatar: { body: string; outfit: string; hair: string; accessory: string }, name: string, x: number, y: number) {
+    this.safeEmit("player:join", { avatar, name, x, y });
   }
 
   sendMove(x: number, y: number) {
@@ -58,15 +87,35 @@ class NetworkService {
     this.lastSentX = rx;
     this.lastSentY = ry;
     this.lastSendTime = now;
-    this.socket.emit("player:move", { x: rx, y: ry });
+    this.safeEmit("player:move", { x: rx, y: ry });
+  }
+
+  sendMessage(text: string, sender: string) {
+    this.safeEmit("chat:message", { text, sender });
   }
 
   on<E extends keyof NetworkEvents>(event: E, callback: NetworkEvents[E]) {
-    this.socket?.on(event as string, callback as (...args: unknown[]) => void);
+    const evtStr = event as string;
+    if (!this.listeners[evtStr]) {
+      this.listeners[evtStr] = [];
+    }
+    // Avoid double registering identical callbacks
+    if (!this.listeners[evtStr].includes(callback)) {
+      this.listeners[evtStr].push(callback);
+      if (this.socket) {
+        this.socket.on(evtStr, callback as (...args: unknown[]) => void);
+      }
+    }
   }
 
   off<E extends keyof NetworkEvents>(event: E, callback: NetworkEvents[E]) {
-    this.socket?.off(event as string, callback as (...args: unknown[]) => void);
+    const evtStr = event as string;
+    if (this.listeners[evtStr]) {
+      this.listeners[evtStr] = this.listeners[evtStr].filter((cb) => cb !== callback);
+    }
+    if (this.socket) {
+      this.socket.off(evtStr, callback as (...args: unknown[]) => void);
+    }
   }
 
   get id(): string | undefined {

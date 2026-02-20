@@ -30,7 +30,8 @@ export default class ObjectManager {
 
     // Register X key
     this.xKey = this.scene.input.keyboard!.addKey(
-      Phaser.Input.Keyboard.KeyCodes.X
+      Phaser.Input.Keyboard.KeyCodes.X,
+      false
     );
 
     // Generate textures and place sprites
@@ -102,7 +103,11 @@ export default class ObjectManager {
     }
 
     // Handle X key press
+    const activeElement = document.activeElement;
+    const isTyping = activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
+
     if (
+      !isTyping &&
       Phaser.Input.Keyboard.JustDown(this.xKey) &&
       this.nearObject &&
       this.nearObject.def.interactionType

@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { generateSpriteSheet, ANIM_CONFIG } from "./SpriteSheetGenerator";
 
 const TILE_SIZE = 32;
 const LERP_FACTOR = 0.15;
@@ -18,7 +19,7 @@ export default class RemotePlayerManager {
     this.scene = scene;
   }
 
-  addPlayer(id: string, name: string, avatarDataURL: string, x: number, y: number) {
+  addPlayer(id: string, name: string, avatarConfig: { body: string; outfit: string; hair: string; accessory: string }, x: number, y: number) {
     if (this.players.has(id)) return;
 
     // Create a fallback texture for this remote player
@@ -32,26 +33,78 @@ export default class RemotePlayerManager {
     const sprite = this.scene.add.sprite(x, y, fallbackKey);
     sprite.setDepth(10);
 
-    // Load the actual avatar texture
-    if (avatarDataURL) {
+    // Load the actual avatar texture through spritesheet generation
+    if (avatarConfig) {
       const texKey = `remote-avatar-${id}`;
-      const img = new Image();
-      img.onload = () => {
-        // Player may have left before image loaded
-        if (!this.players.has(id)) return;
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(img, 0, 0);
-        if (this.scene.textures.exists(texKey)) {
-          this.scene.textures.remove(texKey);
+
+      generateSpriteSheet(avatarConfig).then((canvas) => {
+        if (!this.scene || !this.scene.sys || !this.scene.sys.game || !this.scene.textures || !this.players.has(id)) {
+          console.warn("RemotePlayerManager: scene or game missing when sprite sheet loaded");
+          return;
         }
-        this.scene.textures.addCanvas(texKey, canvas);
-        sprite.setTexture(texKey);
-        sprite.setScale(TILE_SIZE / img.width);
-      };
-      img.src = avatarDataURL;
+
+        try {
+          // Convert canvas to base64
+          const base64 = canvas.toDataURL("image/png");
+
+          if (this.scene.textures.exists(texKey)) {
+            this.scene.textures.remove(texKey);
+          }
+
+          const img = new Image();
+          img.onload = () => {
+            if (!this.scene || !this.scene.sys || !this.scene.anims || !this.players.has(id)) return;
+
+            // Add the image directly as a simple texture
+            const tex = this.scene.textures.addImage(texKey, img);
+
+            if (tex) {
+              // Manually define frames: sprite sheet is a single row of 12 frames (384×32)
+              for (let i = 0; i < 12; i++) {
+                tex.add(i.toString(), 0, i * 32, 0, 32, 32);
+              }
+            }
+
+            // Create remote player animations
+            const animKeys = [`${id}-idle`, `${id}-walk`, `${id}-run`] as const;
+            const configs = [ANIM_CONFIG.idle, ANIM_CONFIG.walk, ANIM_CONFIG.run];
+
+            for (let i = 0; i < animKeys.length; i++) {
+              if (this.scene.anims.exists(animKeys[i])) this.scene.anims.remove(animKeys[i]);
+
+              const frameStart = configs[i].start;
+              const frameEnd = configs[i].end;
+              const frames = [];
+              for (let f = frameStart; f <= frameEnd; f++) {
+                frames.push({ key: texKey, frame: f.toString() });
+              }
+
+              this.scene.anims.create({
+                key: animKeys[i],
+                frames: frames,
+                frameRate: configs[i].frameRate,
+                repeat: configs[i].repeat,
+              });
+            }
+
+            const p = this.players.get(id);
+            if (p && p.sprite && p.sprite.active) {
+              p.sprite.setTexture(texKey);
+              p.sprite.setSize(32, 32);
+              p.sprite.setDisplaySize(32, 32);
+              p.sprite.play(`${id}-idle`);
+            }
+          };
+          img.onerror = (e) => {
+            console.error("RemotePlayerManager Image base64 failed to load", e);
+          };
+          img.src = base64;
+        } catch (e) {
+          console.warn("Failed to generate remote avatar texture", e);
+        }
+      }).catch((e) => {
+        console.warn("Failed to generate remote sprite sheet", e);
+      });
     }
 
     const nameLabel = this.scene.add.text(x, y - 20, name, {
@@ -94,10 +147,35 @@ export default class RemotePlayerManager {
   }
 
   update() {
-    for (const rp of this.players.values()) {
-      rp.sprite.x += (rp.targetX - rp.sprite.x) * LERP_FACTOR;
-      rp.sprite.y += (rp.targetY - rp.sprite.y) * LERP_FACTOR;
+    for (const [id, rp] of this.players.entries()) {
+      const dx = rp.targetX - rp.sprite.x;
+      const dy = rp.targetY - rp.sprite.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      rp.sprite.x += dx * LERP_FACTOR;
+      rp.sprite.y += dy * LERP_FACTOR;
       rp.nameLabel.setPosition(rp.sprite.x, rp.sprite.y - 20);
+
+      // Handle animations
+      if (dist > 1) {
+        // Walk or run based on distance
+        const animKey = dist > 5 ? `${id}-run` : `${id}-walk`;
+        if (rp.sprite.anims && rp.sprite.anims.currentAnim?.key !== animKey && this.scene.anims.exists(animKey)) {
+          rp.sprite.play(animKey, true);
+        }
+
+        // Flip sprite based on movement direction
+        if (dx < 0) {
+          rp.sprite.setFlipX(true);
+        } else if (dx > 0) {
+          rp.sprite.setFlipX(false);
+        }
+      } else {
+        const animKey = `${id}-idle`;
+        if (rp.sprite.anims && rp.sprite.anims.currentAnim?.key !== animKey && this.scene.anims.exists(animKey)) {
+          rp.sprite.play(animKey, true);
+        }
+      }
     }
   }
 
