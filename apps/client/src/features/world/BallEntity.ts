@@ -18,12 +18,11 @@ const BALL_SIZE = 16;
 const CENTER_TILE_X = 30;
 const CENTER_TILE_Y = 7;
 const GOAL_COOLDOWN_MS = 1000;
-const BALL_SYNC_INTERVAL_MS = 100; // Throttle outgoing ball updates
+const BALL_SYNC_INTERVAL_MS = 50;  // Send updates more frequently for smoother sync
 
-// Interpolation / authority constants
-const LERP_SPEED = 0.25;           // How fast to lerp toward server position (0–1)
-const SNAP_THRESHOLD = 200;        // Snap instantly if farther than this (px)
-const KICK_AUTHORITY_MS = 300;     // Ignore incoming syncs for this long after kicking
+// Authority / interpolation constants
+const KICK_AUTHORITY_MS = 400;     // Ignore incoming syncs for this long after kicking
+const SNAP_THRESHOLD = 160;        // Snap instantly if farther than this (px)
 
 export default class BallEntity {
   private sprite: Phaser.GameObjects.Sprite;
@@ -32,21 +31,15 @@ export default class BallEntity {
   private vy = 0;
   private goalCooldown = false;
   private lastSyncTime = 0;
-  private iKicked = false; // True when local player just kicked — we are the authority
-  private lastKickTime = 0; // Timestamp of last kick for authority window
+  private iKicked = false;
+  private lastKickTime = 0;
   private onBallSync: ((data: { x: number; y: number; vx: number; vy: number }) => void) | null = null;
-
-  // Interpolation targets from server sync
-  private targetX = 0;
-  private targetY = 0;
-  private hasTarget = false;
 
   constructor(scene: Phaser.Scene, tileX: number, tileY: number) {
     this.scene = scene;
 
     // Generate pixel-art ball texture
     const gfx = scene.add.graphics();
-    // Outer circle (dark border)
     gfx.fillStyle(0xcc3333);
     gfx.fillRect(4, 0, 8, 1);
     gfx.fillRect(2, 1, 12, 1);
@@ -55,13 +48,11 @@ export default class BallEntity {
     gfx.fillRect(1, 12, 14, 2);
     gfx.fillRect(2, 14, 12, 1);
     gfx.fillRect(4, 15, 8, 1);
-    // Inner highlight
     gfx.fillStyle(0xff5555);
     gfx.fillRect(5, 2, 6, 1);
     gfx.fillRect(3, 3, 8, 2);
     gfx.fillRect(2, 5, 9, 3);
     gfx.fillRect(3, 8, 7, 2);
-    // White shine
     gfx.fillStyle(0xffaaaa);
     gfx.fillRect(5, 3, 3, 2);
     gfx.fillRect(4, 5, 2, 2);
@@ -76,15 +67,29 @@ export default class BallEntity {
 
     // Listen for ball sync from server (other players' kicks + initial state on join)
     this.onBallSync = (data: { x: number; y: number; vx: number; vy: number }) => {
-      // If we just kicked, ignore incoming sync for a short window to prevent bounce-back
+      // If we just kicked, ignore incoming sync briefly to prevent bounce-back
       if (this.iKicked && Date.now() - this.lastKickTime < KICK_AUTHORITY_MS) return;
 
-      this.targetX = data.x;
-      this.targetY = data.y;
+      // We are NOT the authority — accept the server state
+      this.iKicked = false;
+
+      const dx = data.x - this.sprite.x;
+      const dy = data.y - this.sprite.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > SNAP_THRESHOLD) {
+        // Too far (e.g. ball reset to center) — snap instantly
+        this.sprite.x = data.x;
+        this.sprite.y = data.y;
+      } else {
+        // Snap position to server — the server sends frequently enough
+        // that this is smooth. Trying to lerp introduces visible lag.
+        this.sprite.x = data.x;
+        this.sprite.y = data.y;
+      }
+
       this.vx = data.vx;
       this.vy = data.vy;
-      this.iKicked = false;
-      this.hasTarget = true;
     };
     networkService.on("ball:sync", this.onBallSync);
   }
@@ -112,14 +117,13 @@ export default class BallEntity {
     const dx = this.sprite.x - playerX;
     const dy = this.sprite.y - playerY;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > CHARGED_KICK_DISTANCE) return; // too far from ball
+    if (dist > CHARGED_KICK_DISTANCE) return;
 
     const speed = CHARGED_KICK_MIN + (CHARGED_KICK_MAX - CHARGED_KICK_MIN) * charge;
     this.vx = dirX * speed;
     this.vy = dirY * speed;
     this.iKicked = true;
     this.lastKickTime = Date.now();
-    this.hasTarget = false;
 
     // Broadcast immediately on kick
     this.lastSyncTime = 0;
@@ -127,7 +131,7 @@ export default class BallEntity {
   }
 
   update(dt: number, playerX: number, playerY: number) {
-    // Kick detection (contact kick)
+    // ── Contact kick detection ──
     const dx = this.sprite.x - playerX;
     const dy = this.sprite.y - playerY;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -139,43 +143,26 @@ export default class BallEntity {
       this.vy = ny * KICK_SPEED;
       this.iKicked = true;
       this.lastKickTime = Date.now();
-      this.hasTarget = false;
 
-      // Broadcast immediately on kick
       this.lastSyncTime = 0;
       this.broadcastBallState();
     }
 
-    // Interpolate toward server position when not authority
-    if (this.hasTarget && !this.iKicked) {
-      const tdx = this.targetX - this.sprite.x;
-      const tdy = this.targetY - this.sprite.y;
-      const tDist = Math.sqrt(tdx * tdx + tdy * tdy);
-      if (tDist > SNAP_THRESHOLD) {
-        // Too far — snap instantly (e.g. ball reset to center)
-        this.sprite.x = this.targetX;
-        this.sprite.y = this.targetY;
-      } else if (tDist > 1) {
-        // Smooth lerp toward server position
-        this.sprite.x += tdx * LERP_SPEED;
-        this.sprite.y += tdy * LERP_SPEED;
-      }
-      // Update target based on velocity so interpolation stays ahead
-      this.targetX += this.vx * dt;
-      this.targetY += this.vy * dt;
-    }
+    // ── Physics — only run locally when we are the authority (kicker) ──
+    // Non-authority clients receive position directly via ball:sync,
+    // so they only need to dead-reckon between sync packets.
+    // Both authority and non-authority apply velocity for smooth motion.
 
-    // Apply velocity
     this.sprite.x += this.vx * dt;
     this.sprite.y += this.vy * dt;
 
-    // Wall bounce & goal detection
+    // ── Wall bounce & goal detection ──
     const mapData = this.scene.data.get("mapData") as number[][];
     if (mapData) {
       const tileX = Math.floor(this.sprite.x / TILE_SIZE);
       const tileY = Math.floor(this.sprite.y / TILE_SIZE);
 
-      // Goal detection — only the kicker broadcasts the goal to prevent duplicates
+      // Goal detection — only the kicker broadcasts the goal
       if (
         !this.goalCooldown &&
         tileX >= 0 && tileX < MAP_WIDTH &&
@@ -183,20 +170,14 @@ export default class BallEntity {
       ) {
         const tileType = mapData[tileY][tileX];
         if (tileType === 4) {
-          // Ball entered left goal → right team scores
-          if (this.iKicked) {
-            networkService.sendGoal("right");
-          }
+          if (this.iKicked) networkService.sendGoal("right");
           this.goalCooldown = true;
           this.resetToCenter();
           if (this.iKicked) this.broadcastBallState();
           setTimeout(() => { this.goalCooldown = false; }, GOAL_COOLDOWN_MS);
           return;
         } else if (tileType === 5) {
-          // Ball entered right goal → left team scores
-          if (this.iKicked) {
-            networkService.sendGoal("left");
-          }
+          if (this.iKicked) networkService.sendGoal("left");
           this.goalCooldown = true;
           this.resetToCenter();
           if (this.iKicked) this.broadcastBallState();
@@ -210,11 +191,9 @@ export default class BallEntity {
         tileY < 0 || tileY >= MAP_HEIGHT ||
         mapData[tileY][tileX] === 2
       ) {
-        // Revert position
         this.sprite.x -= this.vx * dt;
         this.sprite.y -= this.vy * dt;
 
-        // Determine which axis to bounce
         const nextTX = Math.floor((this.sprite.x + this.vx * dt) / TILE_SIZE);
         const nextTY = Math.floor((this.sprite.y + this.vy * dt) / TILE_SIZE);
         const curTX = Math.floor(this.sprite.x / TILE_SIZE);
@@ -230,7 +209,6 @@ export default class BallEntity {
         if (wallX) this.vx = -this.vx * BOUNCE_DAMPING;
         if (wallY) this.vy = -this.vy * BOUNCE_DAMPING;
         if (!wallX && !wallY) {
-          // Corner hit — reverse both
           this.vx = -this.vx * BOUNCE_DAMPING;
           this.vy = -this.vy * BOUNCE_DAMPING;
         }
@@ -245,14 +223,12 @@ export default class BallEntity {
     if (Math.abs(this.vx) < MIN_SPEED && Math.abs(this.vy) < MIN_SPEED) {
       this.vx = 0;
       this.vy = 0;
-      // Ball stopped — release authority so we can receive syncs again
       if (this.iKicked) {
         this.iKicked = false;
-        this.hasTarget = false;
       }
     }
 
-    // Broadcast ball state periodically while the ball is moving (if I kicked it)
+    // Broadcast ball state periodically while moving (authority only)
     if (this.iKicked && (this.vx !== 0 || this.vy !== 0)) {
       this.broadcastBallState();
     }

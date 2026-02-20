@@ -53,8 +53,8 @@ export default function ChatBox({ playerName }: ChatBoxProps) {
 
     return (
         <div
-            className={`absolute bottom-4 left-4 w-64 md:w-80 bg-black/80 rounded-lg overflow-hidden flex flex-col shadow-lg border border-gray-700/50 z-50`}
-            style={{ maxHeight: "40%" }}
+            className={`absolute bottom-4 left-1/2 -translate-x-1/2 w-64 md:w-80 bg-black/80 rounded-lg overflow-hidden flex flex-col shadow-lg border border-gray-700/50 z-50`}
+            style={{ maxHeight: "30%" }}
         >
             <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1 scrollbar-thin scrollbar-thumb-gray-600">
                 {messages.map((msg, i) => (

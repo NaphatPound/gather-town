@@ -4,6 +4,8 @@ import MainScene from "./MainScene";
 import InteractionOverlay from "./components/InteractionOverlay";
 import ScoreBoard from "./components/ScoreBoard";
 import ChatBox from "./components/ChatBox";
+import MobileControls from "./components/MobileControls";
+import GoalCelebration from "./components/GoalCelebration";
 import { networkService } from "../../core/network/NetworkService";
 
 interface GameViewProps {
@@ -90,6 +92,8 @@ export default function GameView({ avatarDataURL, avatarConfig, playerName, onBa
       <InteractionOverlay />
       <ScoreBoard />
       <ChatBox playerName={playerName} />
+      <MobileControls />
+      <GoalCelebration />
     </div>
   );
 }

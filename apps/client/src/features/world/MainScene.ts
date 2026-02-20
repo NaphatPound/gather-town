@@ -4,6 +4,7 @@ import RemotePlayerManager from "./RemotePlayerManager";
 import BallEntity from "./BallEntity";
 import { networkService, type PlayerData } from "../../core/network/NetworkService";
 import { generateSpriteSheet, ANIM_CONFIG } from "./SpriteSheetGenerator";
+import { mobileInput } from "./mobileInput";
 
 const TILE_SIZE = 32;
 const MAP_WIDTH = 40;
@@ -503,7 +504,7 @@ export default class MainScene extends Phaser.Scene {
 
     let vx = 0;
     let vy = 0;
-    const speed = this.shiftKey.isDown ? SPRINT_SPEED : PLAYER_SPEED;
+    const speed = (this.shiftKey.isDown || mobileInput.sprint) ? SPRINT_SPEED : PLAYER_SPEED;
 
     // Don't capture WASD and space if user is typing in an input or textarea
     const activeElement = document.activeElement;
@@ -512,11 +513,11 @@ export default class MainScene extends Phaser.Scene {
       (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
 
     if (!isTyping) {
-      if (this.cursors.left.isDown || this.wasd.A.isDown) vx = -speed;
-      else if (this.cursors.right.isDown || this.wasd.D.isDown) vx = speed;
+      if (this.cursors.left.isDown || this.wasd.A.isDown || mobileInput.left) vx = -speed;
+      else if (this.cursors.right.isDown || this.wasd.D.isDown || mobileInput.right) vx = speed;
 
-      if (this.cursors.up.isDown || this.wasd.W.isDown) vy = -speed;
-      else if (this.cursors.down.isDown || this.wasd.S.isDown) vy = speed;
+      if (this.cursors.up.isDown || this.wasd.W.isDown || mobileInput.up) vy = -speed;
+      else if (this.cursors.down.isDown || this.wasd.S.isDown || mobileInput.down) vy = speed;
     }
 
     // Track facing direction (only update when moving)
@@ -537,7 +538,7 @@ export default class MainScene extends Phaser.Scene {
     const dt = this.game.loop.delta / 1000;
 
     // ── Charge kick logic ──
-    if (this.spaceKey.isDown && !isTyping) {
+    if ((this.spaceKey.isDown || mobileInput.shoot) && !isTyping) {
       if (!this.isCharging) {
         this.isCharging = true;
         this.charge = 0;
@@ -583,7 +584,7 @@ export default class MainScene extends Phaser.Scene {
     if (this.playerState !== "kick") {
       let newState: "idle" | "walk" | "run" = "idle";
       if (isMoving) {
-        newState = this.shiftKey.isDown ? "run" : "walk";
+        newState = (this.shiftKey.isDown || mobileInput.sprint) ? "run" : "walk";
       }
       if (newState !== this.playerState) {
         this.playerState = newState;
