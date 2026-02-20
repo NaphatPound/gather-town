@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { eventBus, Events } from "../../core/events/EventBus";
+import { networkService } from "../../core/network/NetworkService";
 
 const TILE_SIZE = 32;
 const MAP_WIDTH = 40;
@@ -110,14 +110,14 @@ export default class BallEntity {
         const tileType = mapData[tileY][tileX];
         if (tileType === 4) {
           // Ball entered left goal → right team scores
-          eventBus.emit(Events.GOAL_SCORED, { side: "right" });
+          networkService.sendGoal("right");
           this.goalCooldown = true;
           this.resetToCenter();
           setTimeout(() => { this.goalCooldown = false; }, GOAL_COOLDOWN_MS);
           return;
         } else if (tileType === 5) {
           // Ball entered right goal → left team scores
-          eventBus.emit(Events.GOAL_SCORED, { side: "left" });
+          networkService.sendGoal("left");
           this.goalCooldown = true;
           this.resetToCenter();
           setTimeout(() => { this.goalCooldown = false; }, GOAL_COOLDOWN_MS);

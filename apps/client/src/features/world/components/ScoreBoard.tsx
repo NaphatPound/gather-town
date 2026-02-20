@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { eventBus, Events } from "../../../core/events/EventBus";
+import { networkService } from "../../../core/network/NetworkService";
 
 export default function ScoreBoard() {
   const [leftScore, setLeftScore] = useState(0);
@@ -8,17 +8,25 @@ export default function ScoreBoard() {
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    const unsub = eventBus.on(Events.GOAL_SCORED, ({ side }: { side: "left" | "right" }) => {
-      if (side === "left") setLeftScore((s) => s + 1);
-      else setRightScore((s) => s + 1);
+    // Authoritative score from server (sent on join + after each goal)
+    const handleScoreSync = (data: { left: number; right: number }) => {
+      setLeftScore(data.left);
+      setRightScore(data.right);
+    };
 
-      setFlash(side);
+    // Flash animation on goal
+    const handleGoalScored = (data: { side: "left" | "right" }) => {
+      setFlash(data.side);
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setFlash(null), 800);
-    });
+    };
+
+    networkService.on("score:sync", handleScoreSync);
+    networkService.on("goal:scored", handleGoalScored);
 
     return () => {
-      unsub();
+      networkService.off("score:sync", handleScoreSync);
+      networkService.off("goal:scored", handleGoalScored);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
@@ -64,3 +72,4 @@ export default function ScoreBoard() {
     </div>
   );
 }
+

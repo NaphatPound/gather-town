@@ -38,6 +38,7 @@ const io = new Server(httpServer, {
 });
 
 const players = new Map<string, PlayerData>();
+const score = { left: 0, right: 0 };
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -64,6 +65,9 @@ io.on("connection", (socket) => {
       // Send existing players to the joiner
       console.log(`[SERVER] Sending players:existing to ${socket.id}, count: ${players.size}`);
       socket.emit("players:existing", Array.from(players.values()));
+
+      // Send current score to the joiner
+      socket.emit("score:sync", score);
 
       // Broadcast new player to everyone else
       console.log(`[SERVER] Broadcasting player:joined to others for ${socket.id}`);
@@ -93,6 +97,13 @@ io.on("connection", (socket) => {
   socket.on("chat:message", (data: { text: string; sender: string }) => {
     console.log(`[SERVER] Chat message from ${socket.id} (${data.sender}): ${data.text}`);
     io.emit("chat:message", { id: socket.id, text: data.text, sender: data.sender });
+  });
+
+  socket.on("goal:scored", (data: { side: "left" | "right" }) => {
+    score[data.side] += 1;
+    console.log(`[SERVER] Goal scored: ${data.side}. Score: L${score.left} - R${score.right}`);
+    io.emit("goal:scored", data);
+    io.emit("score:sync", score);
   });
 });
 
