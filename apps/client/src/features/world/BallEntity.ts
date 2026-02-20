@@ -20,6 +20,11 @@ const CENTER_TILE_Y = 7;
 const GOAL_COOLDOWN_MS = 1000;
 const BALL_SYNC_INTERVAL_MS = 100; // Throttle outgoing ball updates
 
+// Interpolation / authority constants
+const LERP_SPEED = 0.25;           // How fast to lerp toward server position (0–1)
+const SNAP_THRESHOLD = 200;        // Snap instantly if farther than this (px)
+const KICK_AUTHORITY_MS = 300;     // Ignore incoming syncs for this long after kicking
+
 export default class BallEntity {
   private sprite: Phaser.GameObjects.Sprite;
   private scene: Phaser.Scene;
@@ -28,7 +33,13 @@ export default class BallEntity {
   private goalCooldown = false;
   private lastSyncTime = 0;
   private iKicked = false; // True when local player just kicked — we are the authority
+  private lastKickTime = 0; // Timestamp of last kick for authority window
   private onBallSync: ((data: { x: number; y: number; vx: number; vy: number }) => void) | null = null;
+
+  // Interpolation targets from server sync
+  private targetX = 0;
+  private targetY = 0;
+  private hasTarget = false;
 
   constructor(scene: Phaser.Scene, tileX: number, tileY: number) {
     this.scene = scene;
@@ -65,11 +76,15 @@ export default class BallEntity {
 
     // Listen for ball sync from server (other players' kicks + initial state on join)
     this.onBallSync = (data: { x: number; y: number; vx: number; vy: number }) => {
-      this.sprite.x = data.x;
-      this.sprite.y = data.y;
+      // If we just kicked, ignore incoming sync for a short window to prevent bounce-back
+      if (this.iKicked && Date.now() - this.lastKickTime < KICK_AUTHORITY_MS) return;
+
+      this.targetX = data.x;
+      this.targetY = data.y;
       this.vx = data.vx;
       this.vy = data.vy;
       this.iKicked = false;
+      this.hasTarget = true;
     };
     networkService.on("ball:sync", this.onBallSync);
   }
@@ -103,6 +118,8 @@ export default class BallEntity {
     this.vx = dirX * speed;
     this.vy = dirY * speed;
     this.iKicked = true;
+    this.lastKickTime = Date.now();
+    this.hasTarget = false;
 
     // Broadcast immediately on kick
     this.lastSyncTime = 0;
@@ -121,10 +138,31 @@ export default class BallEntity {
       this.vx = nx * KICK_SPEED;
       this.vy = ny * KICK_SPEED;
       this.iKicked = true;
+      this.lastKickTime = Date.now();
+      this.hasTarget = false;
 
       // Broadcast immediately on kick
       this.lastSyncTime = 0;
       this.broadcastBallState();
+    }
+
+    // Interpolate toward server position when not authority
+    if (this.hasTarget && !this.iKicked) {
+      const tdx = this.targetX - this.sprite.x;
+      const tdy = this.targetY - this.sprite.y;
+      const tDist = Math.sqrt(tdx * tdx + tdy * tdy);
+      if (tDist > SNAP_THRESHOLD) {
+        // Too far — snap instantly (e.g. ball reset to center)
+        this.sprite.x = this.targetX;
+        this.sprite.y = this.targetY;
+      } else if (tDist > 1) {
+        // Smooth lerp toward server position
+        this.sprite.x += tdx * LERP_SPEED;
+        this.sprite.y += tdy * LERP_SPEED;
+      }
+      // Update target based on velocity so interpolation stays ahead
+      this.targetX += this.vx * dt;
+      this.targetY += this.vy * dt;
     }
 
     // Apply velocity
@@ -207,6 +245,11 @@ export default class BallEntity {
     if (Math.abs(this.vx) < MIN_SPEED && Math.abs(this.vy) < MIN_SPEED) {
       this.vx = 0;
       this.vy = 0;
+      // Ball stopped — release authority so we can receive syncs again
+      if (this.iKicked) {
+        this.iKicked = false;
+        this.hasTarget = false;
+      }
     }
 
     // Broadcast ball state periodically while the ball is moving (if I kicked it)

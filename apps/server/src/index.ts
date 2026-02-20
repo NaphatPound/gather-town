@@ -41,6 +41,11 @@ const players = new Map<string, PlayerData>();
 const score = { left: 0, right: 0 };
 const ballState = { x: 30 * 32 + 16, y: 7 * 32 + 16, vx: 0, vy: 0 };
 
+// Ball authority — prevent competing updates from causing warp
+let ballAuthority: string | null = null;
+let ballAuthorityTime = 0;
+const BALL_AUTHORITY_WINDOW_MS = 300;
+
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });
@@ -103,6 +108,7 @@ io.on("connection", (socket) => {
       ballState.y = 7 * 32 + 16;
       ballState.vx = 0;
       ballState.vy = 0;
+      ballAuthority = null;
       console.log("[SERVER] All players disconnected. Score and ball reset.");
     }
   });
@@ -121,6 +127,17 @@ io.on("connection", (socket) => {
 
   // Ball state sync — relay kicks to all other clients
   socket.on("ball:update", (data: { x: number; y: number; vx: number; vy: number }) => {
+    const now = Date.now();
+    // If another player owns authority and it hasn't expired, ignore this update
+    if (
+      ballAuthority &&
+      ballAuthority !== socket.id &&
+      now - ballAuthorityTime < BALL_AUTHORITY_WINDOW_MS
+    ) {
+      return;
+    }
+    ballAuthority = socket.id;
+    ballAuthorityTime = now;
     ballState.x = data.x;
     ballState.y = data.y;
     ballState.vx = data.vx;
