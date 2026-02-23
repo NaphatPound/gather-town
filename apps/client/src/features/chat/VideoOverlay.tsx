@@ -2,7 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import { webrtcManager } from "../../core/network/WebRTCManager";
 import { networkService } from "../../core/network/NetworkService";
 
-export const VideoOverlay: React.FC = () => {
+interface VideoOverlayProps {
+    playerName: string;
+}
+
+export const VideoOverlay: React.FC<VideoOverlayProps> = ({ playerName }) => {
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
     const [micEnabled, setMicEnabled] = useState(false);
@@ -44,7 +48,7 @@ export const VideoOverlay: React.FC = () => {
         const wantOn = !micEnabled;
         if (wantOn) {
             const stream = await webrtcManager.startLocalStream(true, cameraEnabled);
-            if (!stream) return; // Failed — don't change state
+            if (!stream) return;
             setLocalStream(stream);
         } else {
             webrtcManager.toggleMicrophone(false);
@@ -57,7 +61,7 @@ export const VideoOverlay: React.FC = () => {
         const wantOn = !cameraEnabled;
         if (wantOn) {
             const stream = await webrtcManager.startLocalStream(micEnabled, true);
-            if (!stream) return; // Failed — don't change state
+            if (!stream) return;
             setLocalStream(stream);
         } else {
             webrtcManager.toggleVideo(false);
@@ -68,7 +72,7 @@ export const VideoOverlay: React.FC = () => {
 
     return (
         <>
-            {/* ===== Gather Town Style: Small floating video bubbles (top-left) ===== */}
+            {/* ===== Small floating video bubbles (top-left) ===== */}
             <div className="fixed top-20 left-4 flex flex-col gap-3 z-50 pointer-events-none">
                 {/* Local camera bubble */}
                 {cameraEnabled && (
@@ -81,7 +85,7 @@ export const VideoOverlay: React.FC = () => {
                             className="w-full h-full object-cover transform -scale-x-100"
                         />
                         <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/70 rounded-md px-1.5 py-0.5 text-white text-[10px]">
-                            <span className="font-semibold">You</span>
+                            <span className="font-semibold">{playerName}</span>
                             {!micEnabled && (
                                 <svg className="w-3 h-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -92,15 +96,17 @@ export const VideoOverlay: React.FC = () => {
                     </div>
                 )}
 
-                {/* Remote camera / audio-only bubbles */}
-                {Array.from(remoteStreams.entries()).map(([playerId, stream]) => (
-                    <RemotePlayerBubble key={playerId} playerId={playerId} stream={stream} />
-                ))}
+                {/* Remote camera bubbles — only show if they have active video */}
+                {Array.from(remoteStreams.entries()).map(([playerId, stream]) => {
+                    const hasVideo = stream.getVideoTracks().some(t => t.enabled && t.readyState === "live");
+                    if (!hasVideo) return null; // Camera off → bubble disappears
+                    const name = webrtcManager.getPlayerName(playerId);
+                    return <RemotePlayerBubble key={playerId} name={name} stream={stream} />;
+                })}
             </div>
 
             {/* ===== Bottom control dock ===== */}
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-900/90 backdrop-blur-md px-5 py-2.5 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.5)] border border-gray-700/60 pointer-events-auto">
-                {/* Mic button */}
                 <button
                     onClick={toggleMic}
                     title={micEnabled ? "Mute microphone" : "Unmute microphone"}
@@ -121,7 +127,6 @@ export const VideoOverlay: React.FC = () => {
                     )}
                 </button>
 
-                {/* Camera button */}
                 <button
                     onClick={toggleCamera}
                     title={cameraEnabled ? "Turn off camera" : "Turn on camera"}
@@ -145,11 +150,10 @@ export const VideoOverlay: React.FC = () => {
     );
 };
 
-// ---- Remote Player Bubble ----
+// ---- Remote Player Video Bubble ----
 
-const RemotePlayerBubble: React.FC<{ playerId: string; stream: MediaStream }> = ({ playerId, stream }) => {
+const RemotePlayerBubble: React.FC<{ name: string; stream: MediaStream }> = ({ name, stream }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const hasVideo = stream.getVideoTracks().some(t => t.enabled);
 
     useEffect(() => {
         if (videoRef.current) {
@@ -157,29 +161,17 @@ const RemotePlayerBubble: React.FC<{ playerId: string; stream: MediaStream }> = 
         }
     }, [stream]);
 
-    // If no video, show an audio-only indicator (like Gather Town)
-    if (!hasVideo) {
-        return (
-            <div className="w-36 h-28 bg-gray-800 rounded-2xl border-2 border-indigo-400/60 shadow-lg flex flex-col items-center justify-center pointer-events-auto">
-                <svg className="w-8 h-8 text-indigo-300 mb-1 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-                </svg>
-                <span className="text-[10px] text-gray-300">{playerId.substring(0, 6)}</span>
-            </div>
-        );
-    }
-
     return (
         <div className="w-36 h-28 bg-gray-800 rounded-2xl overflow-hidden border-2 border-blue-400 shadow-[0_4px_20px_rgba(96,165,250,0.2)] relative pointer-events-auto">
             <video
                 ref={videoRef}
                 autoPlay
                 playsInline
-                muted  // Audio goes through Web Audio API spatial panner
+                muted
                 className="w-full h-full object-cover"
             />
             <div className="absolute bottom-1 left-1 bg-black/70 rounded-md px-1.5 py-0.5 text-white text-[10px]">
-                {playerId.substring(0, 6)}
+                {name}
             </div>
         </div>
     );

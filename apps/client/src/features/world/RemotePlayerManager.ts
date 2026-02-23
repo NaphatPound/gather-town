@@ -7,6 +7,7 @@ const LERP_FACTOR = 0.15;
 interface RemotePlayer {
   sprite: Phaser.GameObjects.Sprite;
   nameLabel: Phaser.GameObjects.Text;
+  speakerIcon: Phaser.GameObjects.Text;
   targetX: number;
   targetY: number;
 }
@@ -17,6 +18,19 @@ export default class RemotePlayerManager {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+
+    // Listen for speaking state changes from WebRTCManager
+    import("../../core/network/WebRTCManager").then(({ webrtcManager }) => {
+      // Re-setup with speaking callback — only works if setup hasn't been called yet
+      // Instead, use a polling approach or expose the callback setter
+    });
+  }
+
+  /** Call this from the WebRTCManager's onSpeaking callback */
+  setSpeaking(id: string, isSpeaking: boolean) {
+    const rp = this.players.get(id);
+    if (!rp) return;
+    rp.speakerIcon.setVisible(isSpeaking);
   }
 
   addPlayer(id: string, name: string, avatarConfig: { body: string; outfit: string; hair: string; accessory: string }, x: number, y: number) {
@@ -116,7 +130,15 @@ export default class RemotePlayerManager {
     nameLabel.setOrigin(0.5);
     nameLabel.setDepth(11);
 
-    this.players.set(id, { sprite, nameLabel, targetX: x, targetY: y });
+    // Speaker icon (🔊) — hidden by default, shown when speaking
+    const speakerIcon = this.scene.add.text(x, y - 32, "🔊", {
+      fontSize: "10px",
+    });
+    speakerIcon.setOrigin(0.5);
+    speakerIcon.setDepth(12);
+    speakerIcon.setVisible(false);
+
+    this.players.set(id, { sprite, nameLabel, speakerIcon, targetX: x, targetY: y });
   }
 
   movePlayer(id: string, x: number, y: number) {
@@ -132,6 +154,7 @@ export default class RemotePlayerManager {
 
     rp.sprite.destroy();
     rp.nameLabel.destroy();
+    rp.speakerIcon.destroy();
 
     // Clean up textures
     const fallbackKey = `remote-fallback-${id}`;
@@ -155,6 +178,7 @@ export default class RemotePlayerManager {
       rp.sprite.x += dx * LERP_FACTOR;
       rp.sprite.y += dy * LERP_FACTOR;
       rp.nameLabel.setPosition(rp.sprite.x, rp.sprite.y - 20);
+      rp.speakerIcon.setPosition(rp.sprite.x, rp.sprite.y - 32);
 
       // Handle animations
       if (dist > 1) {

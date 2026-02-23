@@ -5,6 +5,7 @@ interface RemoteMedia {
     panner?: PannerNode;
     gain?: GainNode;
     sourceNode?: MediaStreamAudioSourceNode;
+    analyser?: AnalyserNode;
 }
 
 class WebRTCManager {
@@ -18,19 +19,25 @@ class WebRTCManager {
 
     private onRemoteStreamCallback?: (playerId: string, stream: MediaStream) => void;
     private onRemoteRemovedCallback?: (playerId: string) => void;
+    private onSpeakingCallback?: (playerId: string, isSpeaking: boolean) => void;
     private isSetup = false;
+    private playerNames: Map<string, string> = new Map();
+    private speakingStates: Map<string, boolean> = new Map();
+    private vadIntervalId: number | null = null;
 
     // ---------- Setup ----------
 
     setup(
         onStreamAdded: (playerId: string, stream: MediaStream) => void,
-        onStreamRemoved: (playerId: string) => void
+        onStreamRemoved: (playerId: string) => void,
+        onSpeaking?: (playerId: string, isSpeaking: boolean) => void
     ) {
         if (this.isSetup) return;
         this.isSetup = true;
 
         this.onRemoteStreamCallback = onStreamAdded;
         this.onRemoteRemovedCallback = onStreamRemoved;
+        this.onSpeakingCallback = onSpeaking;
 
         // Signaling events
         networkService.on("webrtc-offer" as any, this.handleOffer.bind(this));
@@ -43,6 +50,13 @@ class WebRTCManager {
 
         // When a new player joins, if we have media, initiate a call to them
         networkService.on("player:joined" as any, this.handlePlayerJoined.bind(this));
+
+        // Start voice activity detection loop
+        this.startVADLoop();
+    }
+
+    getPlayerName(playerId: string): string {
+        return this.playerNames.get(playerId) || playerId.substring(0, 6);
     }
 
     // ---------- Local Media ----------
@@ -109,7 +123,25 @@ class WebRTCManager {
 
     toggleVideo(enabled: boolean) {
         if (this.localStream) {
-            this.localStream.getVideoTracks().forEach((t) => { t.enabled = enabled; });
+            if (!enabled) {
+                // Fully stop and remove video tracks so remote side sees them disappear
+                this.localStream.getVideoTracks().forEach((t) => {
+                    t.stop();
+                    this.localStream!.removeTrack(t);
+                });
+                // Remove video senders from all peer connections and renegotiate
+                for (const [id, pc] of this.peerConnections) {
+                    const senders = pc.getSenders();
+                    senders.forEach(s => {
+                        if (s.track?.kind === "video") {
+                            pc.removeTrack(s);
+                        }
+                    });
+                    this.renegotiate(id, pc);
+                }
+            } else {
+                this.localStream.getVideoTracks().forEach((t) => { t.enabled = true; });
+            }
         }
     }
 
@@ -152,8 +184,12 @@ class WebRTCManager {
 
     // ---------- Call Management ----------
 
-    /** When we get the player list, initiate calls to everyone */
-    private handlePlayersExisting(players: Array<{ id: string }>) {
+    /** When we get the player list, initiate calls and track names */
+    private handlePlayersExisting(players: Array<{ id: string; name?: string }>) {
+        // Track names
+        for (const p of players) {
+            if (p.name) this.playerNames.set(p.id, p.name);
+        }
         if (!this.localStream) return;
         for (const p of players) {
             if (p.id !== networkService.id) {
@@ -162,10 +198,10 @@ class WebRTCManager {
         }
     }
 
-    /** When a new player joins the room, we proactively call them if we have media */
-    private handlePlayerJoined(data: { id: string }) {
+    /** When a new player joins the room, track name and call them */
+    private handlePlayerJoined(data: { id: string; name?: string }) {
+        if (data.name) this.playerNames.set(data.id, data.name);
         if (!this.localStream) return;
-        // Small delay so the new player's UI is ready
         setTimeout(() => {
             this.initiateCall(data.id);
         }, 1000);
@@ -340,6 +376,8 @@ class WebRTCManager {
             if (this.audioContext && stream.getAudioTracks().length > 0 && !existing.sourceNode) {
                 try {
                     const source = this.audioContext.createMediaStreamSource(stream);
+                    const analyser = this.audioContext.createAnalyser();
+                    analyser.fftSize = 512;
                     const panner = this.audioContext.createPanner();
                     panner.panningModel = "HRTF";
                     panner.distanceModel = "inverse";
@@ -350,11 +388,13 @@ class WebRTCManager {
                     const gain = this.audioContext.createGain();
                     gain.gain.value = 1;
 
-                    source.connect(panner);
+                    source.connect(analyser);
+                    analyser.connect(panner);
                     panner.connect(gain);
                     gain.connect(this.audioContext.destination);
 
                     existing.sourceNode = source;
+                    existing.analyser = analyser;
                     existing.panner = panner;
                     existing.gain = gain;
                 } catch (e) {
@@ -372,10 +412,13 @@ class WebRTCManager {
         let panner: PannerNode | undefined;
         let gain: GainNode | undefined;
         let sourceNode: MediaStreamAudioSourceNode | undefined;
+        let analyser: AnalyserNode | undefined;
 
         if (this.audioContext && stream.getAudioTracks().length > 0) {
             try {
                 sourceNode = this.audioContext.createMediaStreamSource(stream);
+                analyser = this.audioContext.createAnalyser();
+                analyser.fftSize = 512;
                 panner = this.audioContext.createPanner();
                 panner.panningModel = "HRTF";
                 panner.distanceModel = "inverse";
@@ -386,7 +429,8 @@ class WebRTCManager {
                 gain = this.audioContext.createGain();
                 gain.gain.value = 1;
 
-                sourceNode.connect(panner);
+                sourceNode.connect(analyser);
+                analyser.connect(panner);
                 panner.connect(gain);
                 gain.connect(this.audioContext.destination);
             } catch (e) {
@@ -394,7 +438,7 @@ class WebRTCManager {
             }
         }
 
-        this.remoteStreams.set(playerId, { stream, panner, gain, sourceNode });
+        this.remoteStreams.set(playerId, { stream, panner, gain, sourceNode, analyser });
 
         // Always notify UI
         if (this.onRemoteStreamCallback) {
@@ -415,6 +459,40 @@ class WebRTCManager {
         if (media?.panner) {
             media.panner.setPosition(x, y, 0);
         }
+    }
+
+    // ---------- Voice Activity Detection ----------
+
+    private startVADLoop() {
+        if (this.vadIntervalId) return;
+        this.vadIntervalId = window.setInterval(() => {
+            for (const [playerId, media] of this.remoteStreams) {
+                if (!media.analyser) continue;
+                const dataArray = new Uint8Array(media.analyser.fftSize);
+                media.analyser.getByteTimeDomainData(dataArray);
+
+                // Calculate RMS level
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    const v = (dataArray[i] - 128) / 128;
+                    sum += v * v;
+                }
+                const rms = Math.sqrt(sum / dataArray.length);
+                const isSpeaking = rms > 0.02; // threshold
+
+                const prev = this.speakingStates.get(playerId) || false;
+                if (isSpeaking !== prev) {
+                    this.speakingStates.set(playerId, isSpeaking);
+                    if (this.onSpeakingCallback) {
+                        this.onSpeakingCallback(playerId, isSpeaking);
+                    }
+                    // Also dispatch a custom event so Phaser scene can listen
+                    window.dispatchEvent(new CustomEvent("webrtc-speaking", {
+                        detail: { playerId, isSpeaking }
+                    }));
+                }
+            }
+        }, 150); // Check every 150ms
     }
 }
 

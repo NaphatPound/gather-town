@@ -93,7 +93,7 @@ export default function GameView({ avatarDataURL, avatarConfig, playerName, onBa
       <InteractionOverlay />
       <ScoreBoard />
       <ChatBox playerName={playerName} />
-      <VideoOverlay />
+      <VideoOverlay playerName={playerName} />
       <MobileControls />
       <GoalCelebration />
     </div>

@@ -268,6 +268,15 @@ export default class MainScene extends Phaser.Scene {
     // --- Multiplayer ---
     this.remotePlayerManager = new RemotePlayerManager(this);
 
+    // Listen for speaking state changes (fired by WebRTCManager's VAD loop)
+    const speakingHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && this.remotePlayerManager) {
+        this.remotePlayerManager.setSpeaking(detail.playerId, detail.isSpeaking);
+      }
+    };
+    window.addEventListener("webrtc-speaking", speakingHandler);
+
     networkService.on("players:existing", this.onPlayersExisting);
     networkService.on("player:joined", this.onPlayerJoined);
     networkService.on("player:moved", this.onPlayerMoved);
