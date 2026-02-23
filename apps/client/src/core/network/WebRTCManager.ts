@@ -4,7 +4,6 @@ interface RemoteMedia {
     stream: MediaStream;
     panner?: PannerNode;
     gain?: GainNode;
-    videoElement?: HTMLVideoElement;
 }
 
 class WebRTCManager {
@@ -16,71 +15,64 @@ class WebRTCManager {
     private localPannerX = 0;
     private localPannerY = 0;
 
-    private onRemoteTrackAddedCallback?: (playerId: string, stream: MediaStream) => void;
-    private onRemoteTrackRemovedCallback?: (playerId: string) => void;
+    private onRemoteStreamCallback?: (playerId: string, stream: MediaStream) => void;
+    private onRemoteRemovedCallback?: (playerId: string) => void;
+    private isSetup = false;
 
-    setup(onTrackAdded: (val: string, s: MediaStream) => void, onTrackRemoved: (val: string) => void) {
-        this.onRemoteTrackAddedCallback = onTrackAdded;
-        this.onRemoteTrackRemovedCallback = onTrackRemoved;
+    // --- Setup ---
+
+    setup(
+        onStreamAdded: (playerId: string, stream: MediaStream) => void,
+        onStreamRemoved: (playerId: string) => void
+    ) {
+        if (this.isSetup) return; // prevent double-binding
+        this.isSetup = true;
+
+        this.onRemoteStreamCallback = onStreamAdded;
+        this.onRemoteRemovedCallback = onStreamRemoved;
 
         networkService.on("webrtc-offer" as any, this.handleOffer.bind(this));
         networkService.on("webrtc-answer" as any, this.handleAnswer.bind(this));
         networkService.on("webrtc-ice-candidate" as any, this.handleIceCandidate.bind(this));
         networkService.on("player:left", this.handlePlayerLeft.bind(this));
+
+        // When we get a list of players, try to call each one
+        networkService.on("players:existing" as any, this.handlePlayersExisting.bind(this));
     }
 
-    async startLocalStream(audio: boolean, video: boolean) {
+    // --- Local Media ---
+
+    async startLocalStream(audio: boolean, video: boolean): Promise<MediaStream | null> {
         try {
-            const newStream = await navigator.mediaDevices.getUserMedia({ audio, video });
+            const constraints: MediaStreamConstraints = {};
+            if (audio) constraints.audio = true;
+            if (video) constraints.video = true;
+
+            const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+
             if (!this.localStream) {
-                this.localStream = newStream;
-            } else {
-                // Merge new tracks into existing stream
-                newStream.getTracks().forEach((track) => {
-                    // Remove existing track of same kind if replacing
-                    const existingTrack = this.localStream!.getTracks().find(t => t.kind === track.kind);
-                    if (existingTrack) {
-                        this.localStream!.removeTrack(existingTrack);
-                        existingTrack.stop();
-                    }
-                    this.localStream!.addTrack(track);
-                });
+                this.localStream = new MediaStream();
             }
 
-            // Sync with existing peers
-            this.updatePeersWithLocalStream();
+            // Merge new tracks into the single localStream
+            newStream.getTracks().forEach((track) => {
+                // Remove old track of same kind
+                const old = this.localStream!.getTracks().find(t => t.kind === track.kind);
+                if (old) {
+                    this.localStream!.removeTrack(old);
+                    old.stop();
+                }
+                this.localStream!.addTrack(track);
+            });
+
+            // Push tracks to all existing peer connections
+            this.syncTracksToAllPeers();
 
             return this.localStream;
         } catch (e) {
-            console.error("Failed to get local media", e);
+            console.error("[WebRTC] Failed to get local media", e);
             return null;
         }
-    }
-
-    private updatePeersWithLocalStream() {
-        if (!this.localStream) return;
-
-        for (const [id, pc] of this.peerConnections.entries()) {
-            const senders = pc.getSenders();
-            this.localStream.getTracks().forEach((track) => {
-                const sender = senders.find(s => s.track && s.track.kind === track.kind);
-                if (sender) {
-                    sender.replaceTrack(track);
-                } else {
-                    pc.addTrack(track, this.localStream!);
-                }
-            });
-            // If adding new tracks we might need renegotiation
-            this.renegotiate(id, pc);
-        }
-    }
-
-    private async renegotiate(targetId: string, pc: RTCPeerConnection) {
-        try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            networkService.safeEmit("webrtc-offer", { target: targetId, sdp: pc.localDescription });
-        } catch (e) { console.error(e) }
     }
 
     stopLocalStream() {
@@ -88,8 +80,7 @@ class WebRTCManager {
             this.localStream.getTracks().forEach((t) => t.stop());
             this.localStream = null;
         }
-        // Also close to peers
-        for (const [id, pc] of this.peerConnections.entries()) {
+        for (const [, pc] of this.peerConnections) {
             pc.close();
         }
         this.peerConnections.clear();
@@ -98,24 +89,65 @@ class WebRTCManager {
 
     toggleMicrophone(enabled: boolean) {
         if (this.localStream) {
-            this.localStream.getAudioTracks().forEach((track) => {
-                track.enabled = enabled;
-            });
+            this.localStream.getAudioTracks().forEach((t) => { t.enabled = enabled; });
         }
     }
 
     toggleVideo(enabled: boolean) {
         if (this.localStream) {
-            this.localStream.getVideoTracks().forEach((track) => {
-                track.enabled = enabled;
-            });
+            this.localStream.getVideoTracks().forEach((t) => { t.enabled = enabled; });
         }
     }
 
-    // --- WebRTC Establishment ---
+    // --- Peer Sync ---
+
+    private syncTracksToAllPeers() {
+        if (!this.localStream) return;
+        for (const [id, pc] of this.peerConnections) {
+            const senders = pc.getSenders();
+            this.localStream.getTracks().forEach((track) => {
+                const existing = senders.find(s => s.track?.kind === track.kind);
+                if (existing) {
+                    existing.replaceTrack(track);
+                } else {
+                    pc.addTrack(track, this.localStream!);
+                }
+            });
+            this.renegotiate(id, pc);
+        }
+    }
+
+    private async renegotiate(targetId: string, pc: RTCPeerConnection) {
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            networkService.safeEmit("webrtc-offer", {
+                target: targetId,
+                sdp: pc.localDescription,
+            });
+        } catch (e) {
+            console.error("[WebRTC] Renegotiation error", e);
+        }
+    }
+
+    // --- Call Management ---
+
+    /**
+     * Called when we get the player list back from the server.
+     * We attempt to initiate a call with every other player.
+     */
+    private handlePlayersExisting(players: Array<{ id: string }>) {
+        if (!this.localStream) return; // Don't call if we have no media
+        for (const p of players) {
+            if (p.id !== networkService.id) {
+                this.initiateCall(p.id);
+            }
+        }
+    }
 
     async initiateCall(targetPlayerId: string) {
-        if (this.peerConnections.has(targetPlayerId)) return;
+        if (this.peerConnections.has(targetPlayerId)) return; // already connected
+        console.log("[WebRTC] Initiating call to", targetPlayerId);
         const pc = this.createPeerConnection(targetPlayerId);
 
         if (this.localStream) {
@@ -129,16 +161,16 @@ class WebRTCManager {
             await pc.setLocalDescription(offer);
             networkService.safeEmit("webrtc-offer", {
                 target: targetPlayerId,
-                sdp: pc.localDescription
+                sdp: pc.localDescription,
             });
         } catch (e) {
-            console.error("Error creating offer", e);
+            console.error("[WebRTC] Error creating offer", e);
         }
     }
 
     private createPeerConnection(targetId: string): RTCPeerConnection {
         const pc = new RTCPeerConnection({
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+            iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
         });
 
         pc.onicecandidate = (event) => {
@@ -151,15 +183,20 @@ class WebRTCManager {
         };
 
         pc.ontrack = (event) => {
-            this.handleRemoteTrack(targetId, event.streams[0]);
+            const stream = event.streams[0];
+            if (stream) {
+                this.handleRemoteTrack(targetId, stream);
+            }
         };
 
         this.peerConnections.set(targetId, pc);
         return pc;
     }
 
+    // --- Signaling Handlers ---
+
     private async handleOffer(data: { caller: string; sdp: any }) {
-        console.log("Got WebRTC Offer from", data.caller);
+        console.log("[WebRTC] Got offer from", data.caller);
         let pc = this.peerConnections.get(data.caller);
         if (!pc) {
             pc = this.createPeerConnection(data.caller);
@@ -168,9 +205,8 @@ class WebRTCManager {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
 
         if (this.localStream) {
+            const senders = pc.getSenders();
             this.localStream.getTracks().forEach((t) => {
-                // Prevent adding duplicate tracks
-                const senders = pc!.getSenders();
                 if (!senders.find((s) => s.track === t)) {
                     pc!.addTrack(t, this.localStream!);
                 }
@@ -187,7 +223,7 @@ class WebRTCManager {
     }
 
     private async handleAnswer(data: { answerer: string; sdp: any }) {
-        console.log("Got WebRTC Answer from", data.answerer);
+        console.log("[WebRTC] Got answer from", data.answerer);
         const pc = this.peerConnections.get(data.answerer);
         if (pc) {
             await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
@@ -200,7 +236,7 @@ class WebRTCManager {
             try {
                 await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
             } catch (e) {
-                console.error("Failed adding ICE candidate", e);
+                console.error("[WebRTC] Failed adding ICE candidate", e);
             }
         }
     }
@@ -216,29 +252,42 @@ class WebRTCManager {
             this.peerConnections.delete(id);
         }
         this.remoteStreams.delete(id);
-        if (this.onRemoteTrackRemovedCallback) {
-            this.onRemoteTrackRemovedCallback(id);
+        if (this.onRemoteRemovedCallback) {
+            this.onRemoteRemovedCallback(id);
         }
     }
 
     // --- Spatial Audio ---
 
     private handleRemoteTrack(playerId: string, stream: MediaStream) {
-        if (this.remoteStreams.has(playerId)) return; // Already setup
-
-        if (!this.audioContext && stream.getAudioTracks().length > 0) {
+        // Always ensure AudioContext is created & resumed (browsers suspend by default)
+        if (!this.audioContext) {
             try {
                 this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-            } catch (e) { console.error(e) }
+            } catch (e) {
+                console.error("[WebRTC] AudioContext creation failed", e);
+            }
+        }
+        if (this.audioContext?.state === "suspended") {
+            this.audioContext.resume();
+        }
+
+        // If we already have this player's stream, just update (don't duplicate nodes)
+        const existing = this.remoteStreams.get(playerId);
+        if (existing) {
+            existing.stream = stream;
+            // Notify UI in case video track was added
+            if (this.onRemoteStreamCallback) {
+                this.onRemoteStreamCallback(playerId, stream);
+            }
+            return;
         }
 
         let panner: PannerNode | undefined;
         let gain: GainNode | undefined;
 
-        // If audio context exists, hook up spatial node, otherwise rely on video element (fallback)
         if (this.audioContext && stream.getAudioTracks().length > 0) {
             try {
-                // MediaStreamTrack -> SourceNode
                 const source = this.audioContext.createMediaStreamSource(stream);
                 panner = this.audioContext.createPanner();
                 panner.panningModel = "HRTF";
@@ -254,14 +303,15 @@ class WebRTCManager {
                 panner.connect(gain);
                 gain.connect(this.audioContext.destination);
             } catch (e) {
-                console.error("Audio Context routing failed", e);
+                console.error("[WebRTC] Audio routing failed", e);
             }
         }
 
         this.remoteStreams.set(playerId, { stream, panner, gain });
 
-        if (this.onRemoteTrackAddedCallback && stream.getVideoTracks().length > 0) {
-            this.onRemoteTrackAddedCallback(playerId, stream);
+        // Always notify UI — it decides what to render (audio-only or video)
+        if (this.onRemoteStreamCallback) {
+            this.onRemoteStreamCallback(playerId, stream);
         }
     }
 
@@ -269,14 +319,13 @@ class WebRTCManager {
         this.localPannerX = x;
         this.localPannerY = y;
         if (this.audioContext) {
-            // Note: using setPosition for simplicity mapping 2D layout to 3D Audio space
             this.audioContext.listener.setPosition(x, y, 0);
         }
     }
 
     updateRemotePlayerPosition(playerId: string, x: number, y: number) {
         const media = this.remoteStreams.get(playerId);
-        if (media && media.panner) {
+        if (media?.panner) {
             media.panner.setPosition(x, y, 0);
         }
     }
