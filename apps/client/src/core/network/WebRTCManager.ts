@@ -133,6 +133,11 @@ class WebRTCManager {
     }
 
     private async renegotiate(targetId: string, pc: RTCPeerConnection) {
+        // Only renegotiate when in stable state — prevents race conditions
+        if (pc.signalingState !== "stable") {
+            console.warn(`[WebRTC] Skipping renegotiation to ${targetId}, state: ${pc.signalingState}`);
+            return;
+        }
         try {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
@@ -167,21 +172,8 @@ class WebRTCManager {
     }
 
     async initiateCall(targetPlayerId: string) {
-        // If we already have a connection, just sync tracks and renegotiate
+        // If we already have a connection, skip — syncTracksToAllPeers handles updates
         if (this.peerConnections.has(targetPlayerId)) {
-            if (this.localStream) {
-                const pc = this.peerConnections.get(targetPlayerId)!;
-                const senders = pc.getSenders();
-                this.localStream.getTracks().forEach((track) => {
-                    const existing = senders.find(s => s.track?.kind === track.kind);
-                    if (existing) {
-                        existing.replaceTrack(track);
-                    } else {
-                        pc.addTrack(track, this.localStream!);
-                    }
-                });
-                this.renegotiate(targetPlayerId, pc);
-            }
             return;
         }
 
