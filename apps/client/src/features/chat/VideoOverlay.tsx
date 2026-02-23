@@ -40,35 +40,29 @@ export const VideoOverlay: React.FC = () => {
         }
     }, [localStream, cameraEnabled]);
 
-    // ---- Toggle Mic ----
     const toggleMic = async () => {
         const wantOn = !micEnabled;
         if (wantOn) {
-            // Acquire audio (keep existing video if any)
             const stream = await webrtcManager.startLocalStream(true, cameraEnabled);
-            if (stream) setLocalStream(stream);
+            if (!stream) return; // Failed — don't change state
+            setLocalStream(stream);
         } else {
             webrtcManager.toggleMicrophone(false);
         }
         setMicEnabled(wantOn);
-
-        // Request player list so WebRTCManager can initiate calls
         networkService.safeEmit("request-players", {});
     };
 
-    // ---- Toggle Camera ----
     const toggleCamera = async () => {
         const wantOn = !cameraEnabled;
         if (wantOn) {
-            // Acquire video (keep existing audio if any)
             const stream = await webrtcManager.startLocalStream(micEnabled, true);
-            if (stream) setLocalStream(stream);
+            if (!stream) return; // Failed — don't change state
+            setLocalStream(stream);
         } else {
             webrtcManager.toggleVideo(false);
         }
         setCameraEnabled(wantOn);
-
-        // Request player list so WebRTCManager can initiate calls
         networkService.safeEmit("request-players", {});
     };
 

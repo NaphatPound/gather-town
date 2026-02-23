@@ -74,8 +74,17 @@ class WebRTCManager {
             this.syncTracksToAllPeers();
 
             return this.localStream;
-        } catch (e) {
+        } catch (e: any) {
             console.error("[WebRTC] Failed to get local media", e);
+            // Show user-friendly error
+            const msg = e?.name === "NotAllowedError"
+                ? "Camera/Mic permission denied. Please allow access in your browser settings."
+                : e?.name === "NotFoundError"
+                    ? "No camera or microphone found on this device."
+                    : navigator.mediaDevices
+                        ? `Failed to access camera/mic: ${e?.message || "Unknown error"}`
+                        : "Camera/Mic requires HTTPS. Please access the site via https:// or localhost.";
+            alert(msg);
             return null;
         }
     }
