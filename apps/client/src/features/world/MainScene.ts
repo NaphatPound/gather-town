@@ -631,6 +631,11 @@ export default class MainScene extends Phaser.Scene {
       this.ball.update(dt, this.player.x, this.player.y);
     }
 
+    // Update Spatial Audio listener position
+    import("../../core/network/WebRTCManager").then(({ webrtcManager }) => {
+      webrtcManager.updateLocalListenerPosition(this.player.x, this.player.y);
+    });
+
     // Send position to server + interpolate remote players
     networkService.sendMove(this.player.x, this.player.y);
     this.remotePlayerManager.update();

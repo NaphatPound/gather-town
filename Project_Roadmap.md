@@ -16,10 +16,19 @@
 - [ ] **Avatar Integration**: Load the custom avatar from Phase 1 into the engine.
 
 ## Phase 3: Multiplayer & Interaction
-**Goal**: See other users.
-- [ ] **Backend**: Set up a WebSocket server (Socket.io, Colyseus, or similar).
-- [ ] **State Sync**: Sync player positions and current avatar configurations.
-- [ ] **Chat/Video**: Add proximity-based interaction.
+**Goal**: See and hear other users.
+- [x] **Backend**: Set up a WebSocket server (Socket.io, Colyseus, or similar).
+- [x] **State Sync**: Sync player positions and current avatar configurations.
+- [x] **Text Chat**: Add proximity-based text interaction.
+- [ ] **Voice Chat**: Implement WebRTC Proximity Voice Chat with Spatial Audio (volume attenuation and L/R panning).
+- [ ] **Video Chat**: Implement WebRTC Video Chat with UI overlays.
+
+## Phase 4: Gameplay Mechanics & Mobile Support
+**Goal**: Interactive world elements and multi-platform access.
+- [x] **Mobile Controls**: On-screen touch controls (Analog, Sprint, Shoot).
+- [x] **Interactive Objects**: Network-synced ball physics (smooth movement, warping).
+- [x] **Gameplay Logic**: Server-authoritative score synchronization and Goal Celebrations.
+- [x] **Platform Specific**: Windows console specific UI options.
 
 ## Tech Stack Recommendation
 - **Frontend**: React (for UI), Phaser (for Game Loop).

@@ -17,7 +17,13 @@ gather-town/
 │   │   │   │   └── store/      # Global State (Zustand)
 │   │   │   ├── features/       # <--- THE MODULES (Plug & Play)
 │   │   │   │   ├── avatar/     # Avatar Creator logic & UI
-│   │   │   │   ├── world/      # Map & Movement logic
+│   │   │   │   ├── world/      # Map, Movement, Gameplay Logic
+│   │   │   │   │   ├── components/
+│   │   │   │   │   │   ├── MobileControls.tsx  # Touch input UI
+│   │   │   │   │   │   └── GoalCelebration.tsx # Goal UI
+│   │   │   │   │   ├── BallEntity.ts     # Synced objects
+│   │   │   │   │   ├── MainScene.ts      # Core Phaser scene
+│   │   │   │   │   └── mobileInput.ts    # Touch mapping logic
 │   │   │   │   ├── chat/       # Chat system
 │   │   │   │   └── ui/         # Shared UI Components (Buttons, Panels)
 │   │   │   ├── hooks/          # Shared React Hooks

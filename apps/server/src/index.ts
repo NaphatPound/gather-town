@@ -82,6 +82,11 @@ io.on("connection", (socket) => {
     }
   );
 
+  socket.on("request-players", () => {
+    // Used by WebRTC to re-sync call triggers
+    socket.emit("players:existing", Array.from(players.values()));
+  });
+
   socket.on("player:move", (data: { x: number; y: number }) => {
     const player = players.get(socket.id);
     if (player) {
@@ -125,7 +130,6 @@ io.on("connection", (socket) => {
     io.emit("score:sync", score);
   });
 
-  // Ball state sync — relay kicks to all other clients
   socket.on("ball:update", (data: { x: number; y: number; vx: number; vy: number }) => {
     const now = Date.now();
     // If another player owns authority and it hasn't expired, ignore this update
@@ -143,6 +147,30 @@ io.on("connection", (socket) => {
     ballState.vx = data.vx;
     ballState.vy = data.vy;
     socket.broadcast.emit("ball:sync", ballState);
+  });
+
+  // ==========================================
+  // WebRTC Signaling (Voice & Video Chat)
+  // ==========================================
+  socket.on("webrtc-offer", (data: { target: string; caller: string; sdp: any }) => {
+    io.to(data.target).emit("webrtc-offer", {
+      caller: socket.id,
+      sdp: data.sdp,
+    });
+  });
+
+  socket.on("webrtc-answer", (data: { target: string; answerer: string; sdp: any }) => {
+    io.to(data.target).emit("webrtc-answer", {
+      answerer: socket.id,
+      sdp: data.sdp,
+    });
+  });
+
+  socket.on("webrtc-ice-candidate", (data: { target: string; candidate: any }) => {
+    io.to(data.target).emit("webrtc-ice-candidate", {
+      sender: socket.id,
+      candidate: data.candidate,
+    });
   });
 });
 

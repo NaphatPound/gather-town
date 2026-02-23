@@ -6,6 +6,7 @@ import ScoreBoard from "./components/ScoreBoard";
 import ChatBox from "./components/ChatBox";
 import MobileControls from "./components/MobileControls";
 import GoalCelebration from "./components/GoalCelebration";
+import { VideoOverlay } from "../chat/VideoOverlay";
 import { networkService } from "../../core/network/NetworkService";
 
 interface GameViewProps {
@@ -92,6 +93,7 @@ export default function GameView({ avatarDataURL, avatarConfig, playerName, onBa
       <InteractionOverlay />
       <ScoreBoard />
       <ChatBox playerName={playerName} />
+      <VideoOverlay />
       <MobileControls />
       <GoalCelebration />
     </div>

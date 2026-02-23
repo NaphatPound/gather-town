@@ -176,6 +176,11 @@ export default class RemotePlayerManager {
           rp.sprite.play(animKey, true);
         }
       }
+
+      // Update Spatial Audio source position
+      import("../../core/network/WebRTCManager").then(({ webrtcManager }) => {
+        webrtcManager.updateRemotePlayerPosition(id, rp.sprite.x, rp.sprite.y);
+      });
     }
   }
 

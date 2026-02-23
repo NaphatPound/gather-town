@@ -17,6 +17,9 @@ type NetworkEvents = {
   "goal:scored": (data: { side: "left" | "right" }) => void;
   "score:sync": (data: { left: number; right: number }) => void;
   "ball:sync": (data: { x: number; y: number; vx: number; vy: number }) => void;
+  "webrtc-offer": (data: { caller: string; sdp: any }) => void;
+  "webrtc-answer": (data: { answerer: string; sdp: any }) => void;
+  "webrtc-ice-candidate": (data: { sender: string; candidate: any }) => void;
 };
 
 const SEND_INTERVAL_MS = 100; // 10 updates/sec
@@ -60,7 +63,7 @@ class NetworkService {
     this.queuedEmits = [];
   }
 
-  private safeEmit(event: string, ...args: any[]) {
+  safeEmit(event: string, ...args: any[]) {
     if (this.socket && this.socket.connected) {
       this.socket.emit(event, ...args);
     } else {
