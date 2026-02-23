@@ -41,86 +41,97 @@ export const VideoOverlay: React.FC = () => {
     }, [localStream]);
 
     const toggleMic = async () => {
-        if (!localStream) {
-            const stream = await webrtcManager.startLocalStream(!micEnabled, cameraEnabled);
+        let stream = localStream;
+        if (!stream && !micEnabled) {
+            stream = await webrtcManager.startLocalStream(true, cameraEnabled);
             if (stream) setLocalStream(stream);
+        } else if (stream && !micEnabled) {
+            // Already has stream (e.g. camera), just add audio
+            stream = await webrtcManager.startLocalStream(true, cameraEnabled);
         } else {
-            webrtcManager.toggleMicrophone(!micEnabled);
+            webrtcManager.toggleMicrophone(false);
         }
         setMicEnabled(!micEnabled);
         connectToOthers();
     };
 
     const toggleCamera = async () => {
-        if (!localStream) {
-            const stream = await webrtcManager.startLocalStream(micEnabled, !cameraEnabled);
+        let stream = localStream;
+        if (!stream && !cameraEnabled) {
+            stream = await webrtcManager.startLocalStream(micEnabled, true);
             if (stream) setLocalStream(stream);
+        } else if (stream && !cameraEnabled) {
+            // Already has stream (e.g. mic), just add video
+            stream = await webrtcManager.startLocalStream(micEnabled, true);
         } else {
-            webrtcManager.toggleVideo(!cameraEnabled);
+            webrtcManager.toggleVideo(false);
         }
         setCameraEnabled(!cameraEnabled);
         connectToOthers();
     };
 
     const connectToOthers = () => {
-        // When turning on media, try to establish connections to everyone we know
-        // This could be optimized to only connect to nearby players
-        networkService.safeEmit("request-players", {}); // Could add a ping to get all existing players if needed
-        // In our implementation, since we rely on "players:existing" or "player:joined" from MainScene,
-        // a simple robust approach for MVP is just calling initiateCall for existing remote players.
-        // For now we assume they'll call us or we call them upon proximity.
-        // Let's rely on everyone creating a connection when they turn on their video.
+        networkService.safeEmit("request-players", {});
     };
 
     return (
-        <div className="absolute top-4 right-4 flex flex-col gap-2 z-50 pointer-events-none">
-            {/* Controls */}
-            <div className="flex gap-2 pointer-events-auto bg-black/50 p-2 rounded justify-end">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl pointer-events-none flex flex-col z-50">
+            {/* Remote Videos Grid Mode */}
+            <div className="flex flex-wrap gap-4 justify-center pointer-events-auto max-h-[70vh] overflow-y-auto w-full p-4">
+                {cameraEnabled && (
+                    <div className="w-80 h-60 bg-gray-900 rounded-xl overflow-hidden border-2 border-green-400 shadow-[0_0_15px_rgba(74,222,128,0.2)] relative flex-shrink-0">
+                        <video
+                            ref={localVideoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover transform -scale-x-100"
+                        />
+                        <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/70 rounded-md px-2 py-1 text-white text-xs">
+                            <span className="font-semibold">You</span>
+                            {!micEnabled && <span className="text-red-400 font-bold">Muted</span>}
+                        </div>
+                    </div>
+                )}
+
+                {Array.from(remoteStreams.entries()).map(([playerId, stream]) => {
+                    const hasVideo = stream.getVideoTracks().some(t => t.enabled);
+                    // if (!hasVideo) return null; // We can show a placeholder if no video, but let's show only active cameras for Discord style grid
+                    return <RemoteVideo key={playerId} playerId={playerId} stream={stream} hasVideo={hasVideo} />;
+                })}
+            </div>
+
+            {/* Bottom Controls Panel */}
+            <div className="absolute top-[80vh] left-1/2 -translate-x-1/2 flex items-center gap-4 bg-gray-900/90 backdrop-blur-md px-6 py-3 rounded-full pointer-events-auto shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-gray-700">
                 <button
                     onClick={toggleMic}
-                    className={`px-3 py-1 rounded text-sm text-white font-bold transition-colors ${micEnabled ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"
+                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${micEnabled ? "bg-gray-700 hover:bg-gray-600 text-white" : "bg-red-500 hover:bg-red-600 text-white"
                         }`}
                 >
-                    {micEnabled ? "Mic On" : "Mic Off"}
+                    {micEnabled ? (
+                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" /></svg>
+                    ) : (
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18M12 14c-1.657 0-3-1.343-3-3V8m10.12 3a7.002 7.002 0 01-14.24 0M12 19.5v2.5M9 22h6" /></svg>
+                    )}
                 </button>
                 <button
                     onClick={toggleCamera}
-                    className={`px-3 py-1 rounded text-sm text-white font-bold transition-colors ${cameraEnabled ? "bg-blue-500 hover:bg-blue-600" : "bg-gray-500 hover:bg-gray-600"
+                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${cameraEnabled ? "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]" : "bg-gray-700 hover:bg-gray-600 text-white"
                         }`}
                 >
-                    {cameraEnabled ? "Cam On" : "Cam Off"}
+                    {cameraEnabled ? (
+                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
+                    ) : (
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18M15 15l-3-3m0 0l-3-3m3 3V8m4 4l3 3m-3-3h3m-3 0h-3" /></svg>
+                    )}
                 </button>
-            </div>
-
-            {/* Local Video */}
-            {cameraEnabled && (
-                <div className="w-32 h-24 bg-gray-900 rounded overflow-hidden border-2 border-green-400 shadow-lg relative pointer-events-auto">
-                    <video
-                        ref={localVideoRef}
-                        autoPlay
-                        playsInline
-                        muted // ALWAYS mute local video to prevent echo
-                        className="w-full h-full object-cover transform -scale-x-100"
-                    />
-                    <div className="absolute bottom-0 left-0 text-[10px] bg-black/60 text-white px-1">
-                        You
-                    </div>
-                </div>
-            )}
-
-            {/* Remote Videos */}
-            <div className="flex flex-col gap-2 mt-2 pointer-events-auto max-h-[60vh] overflow-y-auto">
-                {Array.from(remoteStreams.entries()).map(([playerId, stream]) => {
-                    if (stream.getVideoTracks().length === 0) return null; // Only show if they have video
-                    return <RemoteVideo key={playerId} playerId={playerId} stream={stream} />;
-                })}
             </div>
         </div>
     );
 };
 
 // Helper component to manage remote video elements
-const RemoteVideo: React.FC<{ playerId: string; stream: MediaStream }> = ({ playerId, stream }) => {
+const RemoteVideo: React.FC<{ playerId: string; stream: MediaStream; hasVideo: boolean }> = ({ playerId, stream, hasVideo }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
@@ -129,18 +140,18 @@ const RemoteVideo: React.FC<{ playerId: string; stream: MediaStream }> = ({ play
         }
     }, [stream]);
 
+    if (!hasVideo) return null; // Can render a placeholder here if needed
+
     return (
-        <div className="w-32 h-24 bg-gray-800 rounded overflow-hidden border-2 border-blue-400 shadow-lg relative">
+        <div className="w-80 h-60 bg-gray-800 rounded-xl overflow-hidden border-2 border-blue-400 shadow-[0_0_15px_rgba(96,165,250,0.15)] relative flex-shrink-0 transition-all duration-300">
             <video
                 ref={videoRef}
                 autoPlay
                 playsInline
-                // Audio is played through the audioContext spatial panner, so we MUTE the raw video element!
-                // This is critical so we don't hear double audio.
                 muted
                 className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-0 left-0 text-[10px] bg-black/60 text-white px-1">
+            <div className="absolute bottom-2 left-2 bg-black/70 rounded-md px-2 py-1 text-white text-xs">
                 Player {playerId.substring(0, 4)}
             </div>
         </div>

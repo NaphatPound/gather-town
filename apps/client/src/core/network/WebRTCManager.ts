@@ -31,12 +31,56 @@ class WebRTCManager {
 
     async startLocalStream(audio: boolean, video: boolean) {
         try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({ audio, video });
+            const newStream = await navigator.mediaDevices.getUserMedia({ audio, video });
+            if (!this.localStream) {
+                this.localStream = newStream;
+            } else {
+                // Merge new tracks into existing stream
+                newStream.getTracks().forEach((track) => {
+                    // Remove existing track of same kind if replacing
+                    const existingTrack = this.localStream!.getTracks().find(t => t.kind === track.kind);
+                    if (existingTrack) {
+                        this.localStream!.removeTrack(existingTrack);
+                        existingTrack.stop();
+                    }
+                    this.localStream!.addTrack(track);
+                });
+            }
+
+            // Sync with existing peers
+            this.updatePeersWithLocalStream();
+
             return this.localStream;
         } catch (e) {
             console.error("Failed to get local media", e);
             return null;
         }
+    }
+
+    private updatePeersWithLocalStream() {
+        if (!this.localStream) return;
+
+        for (const [id, pc] of this.peerConnections.entries()) {
+            const senders = pc.getSenders();
+            this.localStream.getTracks().forEach((track) => {
+                const sender = senders.find(s => s.track && s.track.kind === track.kind);
+                if (sender) {
+                    sender.replaceTrack(track);
+                } else {
+                    pc.addTrack(track, this.localStream!);
+                }
+            });
+            // If adding new tracks we might need renegotiation
+            this.renegotiate(id, pc);
+        }
+    }
+
+    private async renegotiate(targetId: string, pc: RTCPeerConnection) {
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            networkService.safeEmit("webrtc-offer", { target: targetId, sdp: pc.localDescription });
+        } catch (e) { console.error(e) }
     }
 
     stopLocalStream() {
