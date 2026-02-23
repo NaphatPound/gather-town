@@ -74,8 +74,8 @@ export const VideoOverlay: React.FC = () => {
 
     return (
         <>
-            {/* ===== Gather Town Style: Small floating video bubbles (top-right) ===== */}
-            <div className="fixed top-20 right-4 flex flex-col gap-3 z-50 pointer-events-none">
+            {/* ===== Gather Town Style: Small floating video bubbles (top-left) ===== */}
+            <div className="fixed top-20 left-4 flex flex-col gap-3 z-50 pointer-events-none">
                 {/* Local camera bubble */}
                 {cameraEnabled && (
                     <div className="w-36 h-28 bg-gray-900 rounded-2xl overflow-hidden border-2 border-green-400 shadow-[0_4px_20px_rgba(74,222,128,0.3)] relative pointer-events-auto">
@@ -111,8 +111,8 @@ export const VideoOverlay: React.FC = () => {
                     onClick={toggleMic}
                     title={micEnabled ? "Mute microphone" : "Unmute microphone"}
                     className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${micEnabled
-                            ? "bg-gray-700 hover:bg-gray-600 text-white"
-                            : "bg-red-500 hover:bg-red-600 text-white"
+                        ? "bg-gray-700 hover:bg-gray-600 text-white"
+                        : "bg-red-500 hover:bg-red-600 text-white"
                         }`}
                 >
                     {micEnabled ? (
@@ -132,8 +132,8 @@ export const VideoOverlay: React.FC = () => {
                     onClick={toggleCamera}
                     title={cameraEnabled ? "Turn off camera" : "Turn on camera"}
                     className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${cameraEnabled
-                            ? "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.4)]"
-                            : "bg-gray-700 hover:bg-gray-600 text-white"
+                        ? "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.4)]"
+                        : "bg-gray-700 hover:bg-gray-600 text-white"
                         }`}
                 >
                     {cameraEnabled ? (
